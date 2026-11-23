@@ -105,5 +105,7 @@ milestone boundary for player feedback.
 - Bullets default to a 5-second lifetime; the value remains configurable in
   `src/config.ts`.
 - M4 defaults to gamepad index 0 and keeps the keyboard scheme available as a
-  fallback. D-pad input takes precedence over the left stick on the same axis;
-  disconnecting a detected controller pauses until a controller reconnects.
+  fallback. The left stick keeps both movement and steering; horizontal
+  right-stick input optionally overrides steering, and D-pad input takes
+  precedence on the same axis. Disconnecting a detected controller pauses
+  until a controller reconnects.

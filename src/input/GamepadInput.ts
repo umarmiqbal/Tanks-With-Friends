@@ -77,10 +77,16 @@ export class GamepadInput implements InputSource {
       Number(this.isButtonPressed(gamepad, 14));
     const stickMove = normalizeAxis(-(gamepad.axes[1] ?? 0), this.deadZone);
     const stickTurn = normalizeAxis(gamepad.axes[0] ?? 0, this.deadZone);
+    const rightStickTurn = normalizeAxis(gamepad.axes[2] ?? 0, this.deadZone);
 
     return {
       move: dpadMove === 0 ? stickMove : dpadMove,
-      turn: dpadTurn === 0 ? stickTurn : dpadTurn,
+      turn:
+        dpadTurn !== 0
+          ? dpadTurn
+          : rightStickTurn !== 0
+            ? rightStickTurn
+            : stickTurn,
       fire:
         this.isButtonPressed(gamepad, 0) ||
         this.isButtonPressed(gamepad, 5) ||

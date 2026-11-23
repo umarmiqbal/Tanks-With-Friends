@@ -68,6 +68,29 @@ describe("GamepadInput", () => {
     centered.destroy();
   });
 
+  it("uses the right stick for steering while retaining left-stick steering", () => {
+    const target = new EventTarget();
+    const gamepad = createGamepad({ axes: [-0.8, 0, 0.6, 0] });
+    const input = new GamepadInput(0, 0.2, 0.5, {
+      target,
+      getGamepads: () => [gamepad],
+    });
+
+    expect(input.read().turn).toBeCloseTo(0.5);
+    input.destroy();
+
+    const leftStick = createGamepad({ axes: [-0.6, -0.6, 0, 0] });
+    const leftStickInput = new GamepadInput(0, 0.2, 0.5, {
+      target: new EventTarget(),
+      getGamepads: () => [leftStick],
+    });
+    const leftStickState = leftStickInput.read();
+    expect(leftStickState.move).toBeCloseTo(0.5);
+    expect(leftStickState.turn).toBeCloseTo(-0.5);
+    expect(leftStickState.fire).toBe(false);
+    leftStickInput.destroy();
+  });
+
   it("uses d-pad directions and A, right bumper, and right trigger for fire", () => {
     const target = new EventTarget();
     const gamepad = createGamepad({
