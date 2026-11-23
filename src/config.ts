@@ -40,6 +40,7 @@ export const config = {
       ammo: 5,
       duration: 12,
       barrelSpacing: 12,
+      maxBulletsAlive: 10,
     },
   },
   audio: {

@@ -115,7 +115,10 @@ export class DoubleShotWeapon implements Weapon {
         },
         context.angle,
         [...context.activeBullets, ...bullets],
-        context.bulletSettings,
+        {
+          ...context.bulletSettings,
+          maxPerTank: config.powerups.doubleShot.maxBulletsAlive,
+        },
       );
       if (bullet === null) {
         return [];

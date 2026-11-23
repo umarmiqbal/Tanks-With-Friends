@@ -5,6 +5,7 @@ import {
   WeaponLoadout,
 } from "../src/game/weapons";
 import type { WeaponFireContext } from "../src/game/weapons";
+import type { BulletState } from "../src/game/bullet";
 
 const fireContext: WeaponFireContext = {
   ownerId: "player-1",
@@ -51,19 +52,41 @@ describe("weapon loadouts", () => {
     );
   });
 
-  it("does not partially fire or spend ammo when its double shot exceeds the bullet cap", () => {
+  it("lets all five volleys fire under the special's bullet cap", () => {
     const loadout = new WeaponLoadout();
     loadout.pickUp(new DoubleShotWeapon());
-    const activeBullets = Array.from({ length: 4 }, (_, index) => ({
-      ...fireContext.bulletSettings,
-      ownerId: "player-1",
-      x: index,
-      y: 0,
-      velocityX: 100,
-      velocityY: 0,
-      remainingLifetime: 5,
-      bounceCount: 0,
-    }));
+    const activeBullets: BulletState[] = [];
+
+    for (let shot = 0; shot < config.powerups.doubleShot.ammo; shot += 1) {
+      const result = loadout.fire({ ...fireContext, activeBullets });
+
+      expect(result.bullets).toHaveLength(2);
+      activeBullets.push(...result.bullets);
+      if (shot < config.powerups.doubleShot.ammo - 1) {
+        loadout.update(config.bullet.fireCooldown);
+      }
+    }
+
+    expect(activeBullets).toHaveLength(config.powerups.doubleShot.maxBulletsAlive);
+    expect(loadout.currentWeapon.type).toBe("cannon");
+  });
+
+  it("does not partially fire or spend ammo when its double shot exceeds its cap", () => {
+    const loadout = new WeaponLoadout();
+    loadout.pickUp(new DoubleShotWeapon());
+    const activeBullets = Array.from(
+      { length: config.powerups.doubleShot.maxBulletsAlive - 1 },
+      (_, index) => ({
+        ...fireContext.bulletSettings,
+        ownerId: "player-1",
+        x: index,
+        y: 0,
+        velocityX: 100,
+        velocityY: 0,
+        remainingLifetime: 5,
+        bounceCount: 0,
+      }),
+    );
 
     const result = loadout.fire({ ...fireContext, activeBullets });
 

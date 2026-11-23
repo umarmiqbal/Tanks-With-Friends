@@ -145,6 +145,9 @@ milestone boundary for player feedback.
 - Double Shot fires parallel projectiles and spends one charge per volley. The
   volley is all-or-nothing if the owner's bullet cap cannot fit both shots.
   Specials reset on death or round end; no weapon crates are dropped.
+- To allow all five Double Shot charges to be used without waiting for older
+  shots to expire, Double Shot may have up to 10 live bullets; the default
+  cannon retains the standard five-bullet cap.
 - If all tanks are destroyed in the same round, it is a draw and no player
   receives a point.
 - The M6 scoreboard is a vertical list in a reserved right-side column so it
