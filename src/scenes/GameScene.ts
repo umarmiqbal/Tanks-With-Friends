@@ -1,5 +1,10 @@
 import Phaser from "phaser";
 import { config } from "../config";
+import {
+  advanceBullet,
+  tryCreateBullet,
+  type BulletState,
+} from "../game/bullet";
 import { generateMaze, type Maze } from "../game/maze";
 import {
   createMazeWallRects,
@@ -7,19 +12,22 @@ import {
   type TankState,
   type WallRect,
 } from "../game/tankMovement";
-import type { InputSource } from "../input/InputSource";
+import type { InputSource, PlayerInput } from "../input/InputSource";
 import { KeyboardInput } from "../input/KeyboardInput";
 
 export class GameScene extends Phaser.Scene {
   private maze!: Maze;
   private wallRects!: WallRect[];
   private tank!: TankState;
+  private bullets: BulletState[] = [];
   private inputSource!: InputSource;
   private accumulator = 0;
+  private fireCooldown = 0;
   private displayScale = 1;
   private boardLeft = 0;
   private boardTop = 0;
   private mazeGraphics!: Phaser.GameObjects.Graphics;
+  private bulletGraphics!: Phaser.GameObjects.Graphics;
   private tankGraphics!: Phaser.GameObjects.Graphics;
   private tankMarker!: Phaser.GameObjects.Text;
   private title!: Phaser.GameObjects.Text;
@@ -50,6 +58,7 @@ export class GameScene extends Phaser.Scene {
       config.input.keyboardSchemes[0],
     );
     this.mazeGraphics = this.add.graphics();
+    this.bulletGraphics = this.add.graphics().setDepth(1);
     this.tankGraphics = this.add.graphics().setDepth(1);
     this.tankMarker = this.add
       .text(0, 0, "1", {
@@ -70,7 +79,7 @@ export class GameScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
     this.subtitle = this.add
-      .text(0, 0, "A new maze every round", {
+      .text(0, 0, "W/S drive  A/D turn  Space fire", {
         color: config.presentation.subtitleColor,
         fontFamily: config.presentation.fontFamily,
         fontSize: `${config.presentation.subtitleFontSize}px`,
@@ -88,16 +97,20 @@ export class GameScene extends Phaser.Scene {
   update(_time: number, deltaMilliseconds: number): void {
     this.accumulator += deltaMilliseconds / 1000;
     while (this.accumulator >= config.simulation.fixedTimeStep) {
+      const input = this.inputSource.read();
       this.tank = moveTank(
         this.tank,
-        this.inputSource.read(),
+        input,
         config.simulation.fixedTimeStep,
         this.wallRects,
         config.tank,
       );
+      this.stepBullets(config.simulation.fixedTimeStep);
+      this.updateFiring(input, config.simulation.fixedTimeStep);
       this.accumulator -= config.simulation.fixedTimeStep;
     }
     this.positionTank();
+    this.drawBullets();
   }
 
   private layout(gameSize: { width: number; height: number }): void {
@@ -158,6 +171,55 @@ export class GameScene extends Phaser.Scene {
     this.tankMarker
       .setPosition(x, y)
       .setScale(this.displayScale);
+  }
+
+  private stepBullets(deltaSeconds: number): void {
+    this.bullets = this.bullets.flatMap((bullet) => {
+      const advanced = advanceBullet(
+        bullet,
+        deltaSeconds,
+        this.wallRects,
+        config.bullet,
+      );
+      return advanced === null ? [] : [advanced];
+    });
+  }
+
+  private updateFiring(input: PlayerInput, deltaSeconds: number): void {
+    this.fireCooldown = Math.max(0, this.fireCooldown - deltaSeconds);
+    if (!input.fire || this.fireCooldown > 0) {
+      return;
+    }
+
+    const muzzleDistance = config.tank.radius - config.bullet.radius;
+    const origin = {
+      x: this.tank.x + Math.cos(this.tank.angle) * muzzleDistance,
+      y: this.tank.y + Math.sin(this.tank.angle) * muzzleDistance,
+    };
+    const bullet = tryCreateBullet(
+      "player-1",
+      origin,
+      this.tank.angle,
+      this.bullets,
+      config.bullet,
+    );
+    if (bullet !== null) {
+      this.bullets.push(bullet);
+      this.fireCooldown = config.bullet.fireCooldown;
+    }
+  }
+
+  private drawBullets(): void {
+    const graphics = this.bulletGraphics;
+    graphics.clear();
+    graphics.fillStyle(config.presentation.bulletColor);
+    for (const bullet of this.bullets) {
+      graphics.fillCircle(
+        this.boardLeft + bullet.x * this.displayScale,
+        this.boardTop + bullet.y * this.displayScale,
+        bullet.radius * this.displayScale,
+      );
+    }
   }
 
   private drawMaze(left: number, top: number, cellSize: number): void {

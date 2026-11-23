@@ -25,6 +25,9 @@ export const config = {
     speed: 500,
     lifetime: 8,
     maxPerTank: 5,
+    radius: 5,
+    fireCooldown: 0.25,
+    collisionEpsilon: 0.01,
   },
   match: {
     scoreToWin: 5,
@@ -86,6 +89,7 @@ export const config = {
     subtitleColor: "#a9bac7",
     playerColors: [0x35b8e8, 0xf25f5c, 0xf2b544, 0x70c770, 0xb07be5, 0xf08ab6],
     markerColor: "#101820",
+    bulletColor: 0xffe26b,
     fontFamily: "Arial, sans-serif",
     titleFontSize: 32,
     subtitleFontSize: 16,

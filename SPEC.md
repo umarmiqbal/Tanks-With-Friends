@@ -99,3 +99,6 @@ milestone boundary for player feedback.
 - M2's tank starts in the center of the second cell in the top-left row, facing
   right. Simulation and wall collision use maze-cell world units; rendering
   scales the tank together with the maze.
+- Holding the fire key repeats shots at a configurable cooldown. A bullet starts
+  at the edge of its tank's collision circle, and its lifetime and ammo slot
+  begin at creation.
