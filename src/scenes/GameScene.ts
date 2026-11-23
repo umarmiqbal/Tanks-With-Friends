@@ -7,6 +7,11 @@ import {
 import { advanceCombat, type CombatState } from "../game/combat";
 import { generateMaze, type Maze } from "../game/maze";
 import {
+  advanceMatch,
+  createMatchState,
+  type MatchState,
+} from "../game/rounds";
+import {
   createMazeWallRects,
   moveTank,
   type TankState,
@@ -38,18 +43,23 @@ export class GameScene extends Phaser.Scene {
   private wallRects!: WallRect[];
   private players: LocalPlayer[] = [];
   private bullets: BulletState[] = [];
+  private matchState!: MatchState;
   private accumulator = 0;
   private controllerDisconnected = false;
   private pausedForDisconnect = false;
   private displayScale = 1;
+  private displayCellSize: number = config.maze.cellSize;
   private boardLeft = 0;
   private boardTop = 0;
   private mazeGraphics!: Phaser.GameObjects.Graphics;
   private bulletGraphics!: Phaser.GameObjects.Graphics;
   private disconnectPanel!: Phaser.GameObjects.Graphics;
   private disconnectMessage!: Phaser.GameObjects.Text;
+  private statusPanel!: Phaser.GameObjects.Graphics;
+  private statusMessage!: Phaser.GameObjects.Text;
   private title!: Phaser.GameObjects.Text;
   private subtitle!: Phaser.GameObjects.Text;
+  private scoreboard!: Phaser.GameObjects.Text;
 
   constructor() {
     super("game");
@@ -61,16 +71,7 @@ export class GameScene extends Phaser.Scene {
     this.accumulator = 0;
     this.controllerDisconnected = false;
     this.pausedForDisconnect = false;
-    this.maze = generateMaze(
-      config.maze.columns,
-      config.maze.rows,
-      config.maze.extraOpenings,
-    );
-    this.wallRects = createMazeWallRects(
-      this.maze,
-      config.maze.cellSize,
-      config.maze.wallThickness,
-    );
+    this.generateRoundMaze();
     this.mazeGraphics = this.add.graphics();
     this.bulletGraphics = this.add.graphics().setDepth(1);
     const gamepadInput = new GamepadInput(
@@ -82,34 +83,7 @@ export class GameScene extends Phaser.Scene {
           this.handleControllerConnection(connected),
       },
     );
-    const spawnPoints: SpawnPoint[] = [
-      { column: 1, row: 0, angle: 0 },
-      {
-        column: config.maze.columns - 2,
-        row: config.maze.rows - 1,
-        angle: Math.PI,
-      },
-      {
-        column: config.maze.columns - 2,
-        row: 0,
-        angle: Math.PI / 2,
-      },
-      {
-        column: 1,
-        row: config.maze.rows - 1,
-        angle: -Math.PI / 2,
-      },
-      {
-        column: Math.floor(config.maze.columns / 2),
-        row: 1,
-        angle: Math.PI / 2,
-      },
-      {
-        column: Math.floor(config.maze.columns / 2),
-        row: config.maze.rows - 2,
-        angle: -Math.PI / 2,
-      },
-    ];
+    const spawnPoints = this.getSpawnPoints();
     const playerCount = Math.min(
       config.match.preLobbyPlayerCount,
       spawnPoints.length,
@@ -142,6 +116,19 @@ export class GameScene extends Phaser.Scene {
       .setDepth(10);
     this.disconnectPanel.setVisible(false);
     this.disconnectMessage.setVisible(false);
+    this.statusPanel = this.add.graphics().setDepth(7).setScrollFactor(0);
+    this.statusMessage = this.add
+      .text(0, 0, "", {
+        color: config.presentation.statusColor,
+        fontFamily: config.presentation.fontFamily,
+        fontSize: `${config.presentation.statusFontSize}px`,
+        fontStyle: "bold",
+        align: "center",
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(8)
+      .setVisible(false);
     this.title = this.add
       .text(0, 0, "Tanks With Friends", {
         color: config.presentation.titleColor,
@@ -162,6 +149,16 @@ export class GameScene extends Phaser.Scene {
         },
       )
       .setOrigin(0.5);
+    this.scoreboard = this.add
+      .text(0, 0, "", {
+        color: config.presentation.scoreboardColor,
+        fontFamily: config.presentation.fontFamily,
+        fontSize: `${config.presentation.scoreboardFontSize}px`,
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5);
+    this.matchState = createMatchState(this.players.map((player) => player.id));
+    this.refreshMatchPresentation();
 
     this.scale.on(Phaser.Scale.Events.RESIZE, this.layout, this);
     this.layout({ width: this.scale.width, height: this.scale.height });
@@ -176,34 +173,64 @@ export class GameScene extends Phaser.Scene {
   update(_time: number, deltaMilliseconds: number): void {
     this.accumulator += deltaMilliseconds / 1000;
     while (this.accumulator >= config.simulation.fixedTimeStep) {
-      const controls: Array<{ player: LocalPlayer; input: PlayerInput }> = [];
-      for (const player of this.players) {
-        if (!player.alive) {
-          continue;
-        }
-        const playerInput = player.inputSource.read();
-        if (this.controllerDisconnected) {
-          break;
-        }
-        player.tank = moveTank(
-          player.tank,
-          playerInput,
-          config.simulation.fixedTimeStep,
-          this.wallRects,
-          config.tank,
-        );
-        controls.push({ player, input: playerInput });
-      }
-
-      if (this.controllerDisconnected) {
+      if (this.matchState.phase === "matchOver") {
         this.accumulator = 0;
         break;
       }
-      this.stepBullets(config.simulation.fixedTimeStep);
-      for (const { player, input } of controls) {
-        if (player.alive) {
-          this.updateFiring(player, input, config.simulation.fixedTimeStep);
+
+      if (this.matchState.phase === "playing") {
+        const controls: Array<{ player: LocalPlayer; input: PlayerInput }> = [];
+        for (const player of this.players) {
+          if (!player.alive) {
+            continue;
+          }
+          const playerInput = player.inputSource.read();
+          if (this.controllerDisconnected) {
+            break;
+          }
+          player.tank = moveTank(
+            player.tank,
+            playerInput,
+            config.simulation.fixedTimeStep,
+            this.wallRects,
+            config.tank,
+          );
+          controls.push({ player, input: playerInput });
         }
+
+        if (this.controllerDisconnected) {
+          this.accumulator = 0;
+          break;
+        }
+        this.stepBullets(config.simulation.fixedTimeStep);
+        for (const { player, input } of controls) {
+          if (player.alive) {
+            this.updateFiring(player, input, config.simulation.fixedTimeStep);
+          }
+        }
+      }
+
+      const previousMatch = this.matchState;
+      const matchUpdate = advanceMatch(
+        this.matchState,
+        this.players
+          .filter((player) => player.alive)
+          .map((player) => player.id),
+        config.simulation.fixedTimeStep,
+        config.match,
+      );
+      this.matchState = matchUpdate.state;
+      if (previousMatch.phase === "playing" && this.matchState.phase !== "playing") {
+        this.bullets = [];
+      }
+      if (matchUpdate.startNextRound) {
+        this.startNextRound();
+      }
+      if (
+        previousMatch.phase !== this.matchState.phase ||
+        previousMatch.round !== this.matchState.round
+      ) {
+        this.refreshMatchPresentation();
       }
       this.accumulator -= config.simulation.fixedTimeStep;
     }
@@ -228,15 +255,65 @@ export class GameScene extends Phaser.Scene {
     const boardWidth = cellSize * this.maze.columns;
     const boardHeight = cellSize * this.maze.rows;
     this.displayScale = cellSize / config.maze.cellSize;
+    this.displayCellSize = cellSize;
     this.boardLeft = (width - boardWidth) / 2;
     this.boardTop =
       boardPadding + titleHeight + (availableHeight - boardHeight) / 2;
 
     this.title.setPosition(width / 2, titleTopOffset);
     this.subtitle.setPosition(width / 2, titleTopOffset + titleHeight / 2);
+    this.scoreboard.setPosition(
+      width / 2,
+      titleTopOffset + titleHeight + config.presentation.boardPadding / 4,
+    );
     this.drawMaze(this.boardLeft, this.boardTop, cellSize);
     this.positionPlayers();
     this.positionDisconnectNotice(width, height);
+    this.positionMatchStatus(width, height);
+  }
+
+  private generateRoundMaze(): void {
+    this.maze = generateMaze(
+      config.maze.columns,
+      config.maze.rows,
+      config.maze.extraOpenings,
+    );
+    this.wallRects = createMazeWallRects(
+      this.maze,
+      config.maze.cellSize,
+      config.maze.wallThickness,
+    );
+  }
+
+  private getSpawnPoints(): SpawnPoint[] {
+    return [
+      { column: 1, row: 0, angle: 0 },
+      {
+        column: config.maze.columns - 2,
+        row: config.maze.rows - 1,
+        angle: Math.PI,
+      },
+      {
+        column: config.maze.columns - 2,
+        row: 0,
+        angle: Math.PI / 2,
+      },
+      {
+        column: 1,
+        row: config.maze.rows - 1,
+        angle: -Math.PI / 2,
+      },
+      {
+        column: Math.floor(config.maze.columns / 2),
+        row: 1,
+        angle: Math.PI / 2,
+      },
+      {
+        column: Math.floor(config.maze.columns / 2),
+        row: config.maze.rows - 2,
+        angle: -Math.PI / 2,
+      },
+    ];
   }
 
   private handleControllerConnection(connected: boolean): void {
@@ -270,6 +347,76 @@ export class GameScene extends Phaser.Scene {
       this.disconnectMessage.width + padding * 2,
       this.disconnectMessage.height + padding * 2,
     );
+  }
+
+  private refreshMatchPresentation(): void {
+    this.scoreboard.setText(
+      this.players
+        .map(
+          (player, index) =>
+            `P${index + 1} ${this.matchState.scores[player.id] ?? 0}`,
+        )
+        .join("     "),
+    );
+
+    const showStatus = this.matchState.phase !== "playing";
+    this.statusMessage.setText(this.getMatchStatusText());
+    this.statusMessage.setVisible(showStatus);
+    this.statusPanel.setVisible(showStatus);
+    this.positionMatchStatus(this.scale.width, this.scale.height);
+  }
+
+  private getMatchStatusText(): string {
+    if (this.matchState.winnerId === null) {
+      return this.matchState.phase === "matchOver"
+        ? "MATCH DRAW"
+        : `ROUND ${this.matchState.round} DRAW\nNext round starting`;
+    }
+
+    const winnerIndex = this.players.findIndex(
+      (player) => player.id === this.matchState.winnerId,
+    );
+    const winnerLabel = `PLAYER ${winnerIndex + 1}`;
+    return this.matchState.phase === "matchOver"
+      ? `${winnerLabel} WINS THE MATCH`
+      : `${winnerLabel} WINS ROUND ${this.matchState.round}\nNext round starting`;
+  }
+
+  private positionMatchStatus(width: number, height: number): void {
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const padding = config.presentation.statusPanelPadding;
+    this.statusMessage.setPosition(centerX, centerY);
+    this.statusPanel.clear();
+    this.statusPanel.fillStyle(config.presentation.statusPanelColor);
+    this.statusPanel.fillRect(
+      centerX - this.statusMessage.width / 2 - padding,
+      centerY - this.statusMessage.height / 2 - padding,
+      this.statusMessage.width + padding * 2,
+      this.statusMessage.height + padding * 2,
+    );
+  }
+
+  private startNextRound(): void {
+    this.generateRoundMaze();
+    this.bullets = [];
+    const spawnPoints = this.getSpawnPoints();
+    for (const [index, player] of this.players.entries()) {
+      const spawn = spawnPoints[index]!;
+      player.tank = {
+        x: (spawn.column + 0.5) * config.maze.cellSize,
+        y: (spawn.row + 0.5) * config.maze.cellSize,
+        angle: spawn.angle,
+      };
+      player.alive = true;
+      player.fireCooldown = 0;
+    }
+    this.drawMaze(
+      this.boardLeft,
+      this.boardTop,
+      this.displayCellSize,
+    );
+    this.positionPlayers();
   }
 
   private createPlayer(

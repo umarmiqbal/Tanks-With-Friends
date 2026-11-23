@@ -113,3 +113,5 @@ milestone boundary for player feedback.
   the first keyboard scheme as fallback, and player 2 uses the arrow keys.
   Their positions are spread across the maze; M7 will replace this fixed roster
   with lobby joins.
+- If all tanks are destroyed in the same round, it is a draw and no player
+  receives a point.

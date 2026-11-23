@@ -37,11 +37,12 @@ The test suite uses Vitest. The production build is written to `dist/`.
 
 ## Current milestone
 
-M5 renders a generated maze with two tanks and combat. Player 1 uses the
+M6 renders a generated maze with two tanks, combat, rounds, and a scoreboard.
+The first player to five points wins. Player 1 uses the
 gamepad at index 0 when active, or **W/S** to drive, **A/D** to turn, and
 **Space** to fire. Player 2 uses the arrow keys to drive/turn and **Enter** to
 fire. On a Standard-mapped gamepad, the left stick drives and turns; horizontal
 right-stick input optionally steers, and the D-pad overrides stick input.
 **A**, **RB**, or **RT** fires. One hit destroys a tank, including its own
 bounced bullets. Disconnecting a detected controller pauses until it
-reconnects. Rounds and the lobby are planned milestones.
+reconnects. The lobby and presentation/audio polish remain planned milestones.
