@@ -1,12 +1,20 @@
 import Phaser from "phaser";
 import { config } from "../config";
 import { soundEffects } from "../audio/soundEffects";
+import type { BulletState } from "../game/bullet";
 import {
-  tryCreateBullet,
-  type BulletState,
-} from "../game/bullet";
+  crateCenter,
+  spawnPowerupCrate,
+  tankTouchesCrate,
+  type PowerupCrate,
+} from "../game/crates";
 import { advanceCombat, type CombatState } from "../game/combat";
 import { generateMaze, type Maze } from "../game/maze";
+import {
+  createRandomSeed,
+  createSeededRandom,
+  type RandomSource,
+} from "../game/random";
 import {
   advanceMatch,
   createMatchState,
@@ -18,6 +26,11 @@ import {
   type TankState,
   type WallRect,
 } from "../game/tankMovement";
+import {
+  createSpecialWeapon,
+  WeaponLoadout,
+  type SpecialWeaponType,
+} from "../game/weapons";
 import type { PlayerSetup } from "../game/playerSetup";
 import type { InputSource, PlayerInput } from "../input/InputSource";
 import { GamepadInput } from "../input/GamepadInput";
@@ -35,7 +48,7 @@ interface LocalPlayer {
   tank: TankState;
   alive: boolean;
   inputSource: InputSource;
-  fireCooldown: number;
+  weapons: WeaponLoadout;
   graphics: Phaser.GameObjects.Graphics;
   marker: Phaser.GameObjects.Text;
 }
@@ -47,6 +60,16 @@ interface ExplosionEffect {
   elapsed: number;
 }
 
+interface ActiveCrate extends PowerupCrate<SpecialWeaponType> {
+  elapsed: number;
+}
+
+interface PickupEffect {
+  x: number;
+  y: number;
+  elapsed: number;
+}
+
 export class GameScene extends Phaser.Scene {
   private maze!: Maze;
   private wallRects!: WallRect[];
@@ -54,6 +77,10 @@ export class GameScene extends Phaser.Scene {
   private playerSetups: PlayerSetup[] = [];
   private bullets: BulletState[] = [];
   private explosions: ExplosionEffect[] = [];
+  private crates: ActiveCrate[] = [];
+  private pickupEffects: PickupEffect[] = [];
+  private random!: RandomSource;
+  private crateSpawnRemaining = config.powerups.crateSpawnInterval;
   private matchState!: MatchState;
   private accumulator = 0;
   private controllerDisconnected = false;
@@ -66,6 +93,8 @@ export class GameScene extends Phaser.Scene {
   private mazeGraphics!: Phaser.GameObjects.Graphics;
   private bulletGraphics!: Phaser.GameObjects.Graphics;
   private explosionGraphics!: Phaser.GameObjects.Graphics;
+  private crateGraphics!: Phaser.GameObjects.Graphics;
+  private pickupGraphics!: Phaser.GameObjects.Graphics;
   private disconnectPanel!: Phaser.GameObjects.Graphics;
   private disconnectMessage!: Phaser.GameObjects.Text;
   private statusPanel!: Phaser.GameObjects.Graphics;
@@ -79,14 +108,18 @@ export class GameScene extends Phaser.Scene {
     super("game");
   }
 
-  init(data: { players: PlayerSetup[] }): void {
+  init(data: { players: PlayerSetup[]; randomSeed?: number }): void {
     this.playerSetups = data.players;
+    this.random = createSeededRandom(data.randomSeed ?? createRandomSeed());
   }
 
   create(): void {
     this.players = [];
     this.bullets = [];
     this.explosions = [];
+    this.crates = [];
+    this.pickupEffects = [];
+    this.crateSpawnRemaining = config.powerups.crateSpawnInterval;
     this.accumulator = 0;
     this.controllerDisconnected = false;
     this.pausedForDisconnect = false;
@@ -95,6 +128,10 @@ export class GameScene extends Phaser.Scene {
     this.mazeGraphics = this.add.graphics();
     this.bulletGraphics = this.add.graphics().setDepth(1);
     this.explosionGraphics = this.add.graphics().setDepth(4);
+    this.crateGraphics = this.add
+      .graphics()
+      .setDepth(config.presentation.powerupCrateDepth);
+    this.pickupGraphics = this.add.graphics().setDepth(5);
     if (
       this.playerSetups.length === 0 ||
       this.playerSetups.length > config.input.maximumPlayers
@@ -196,6 +233,7 @@ export class GameScene extends Phaser.Scene {
 
   update(_time: number, deltaMilliseconds: number): void {
     this.updateExplosions(deltaMilliseconds / 1000);
+    this.updatePickupEffects(deltaMilliseconds / 1000);
     this.accumulator += deltaMilliseconds / 1000;
     while (this.accumulator >= config.simulation.fixedTimeStep) {
       if (this.matchState.phase === "matchOver") {
@@ -204,6 +242,15 @@ export class GameScene extends Phaser.Scene {
       }
 
       if (this.matchState.phase === "playing") {
+        let weaponExpired = false;
+        for (const player of this.players) {
+          weaponExpired = player.weapons.update(
+            config.simulation.fixedTimeStep,
+          ) || weaponExpired;
+        }
+        if (weaponExpired) {
+          this.refreshScoreboard();
+        }
         const controls: Array<{ player: LocalPlayer; input: PlayerInput }> = [];
         for (const player of this.players) {
           if (!player.alive) {
@@ -227,10 +274,11 @@ export class GameScene extends Phaser.Scene {
           this.accumulator = 0;
           break;
         }
+        this.updateCrates(config.simulation.fixedTimeStep);
         this.stepBullets(config.simulation.fixedTimeStep);
         for (const { player, input } of controls) {
           if (player.alive) {
-            this.updateFiring(player, input, config.simulation.fixedTimeStep);
+            this.updateFiring(player, input);
           }
         }
       }
@@ -247,6 +295,7 @@ export class GameScene extends Phaser.Scene {
       this.matchState = matchUpdate.state;
       if (previousMatch.phase === "playing" && this.matchState.phase !== "playing") {
         this.bullets = [];
+        this.clearRoundPowerups();
         if (this.matchState.winnerId !== null) {
           soundEffects.playRoundWin();
         }
@@ -264,7 +313,9 @@ export class GameScene extends Phaser.Scene {
     }
     this.positionPlayers();
     this.drawBullets();
+    this.drawCrates();
     this.drawExplosions();
+    this.drawPickupEffects();
   }
 
   private layout(gameSize: { width: number; height: number }): void {
@@ -314,6 +365,7 @@ export class GameScene extends Phaser.Scene {
       config.maze.columns,
       config.maze.rows,
       config.maze.extraOpenings,
+      this.random,
     );
     this.wallRects = createMazeWallRects(
       this.maze,
@@ -427,21 +479,31 @@ export class GameScene extends Phaser.Scene {
   }
 
   private refreshMatchPresentation(): void {
-    this.scoreboard.setText(
-      [
-        "SCORE",
-        ...this.players.map(
-          (player) =>
-            `P${player.colorIndex + 1} ${this.matchState.scores[player.id] ?? 0}`,
-        ),
-      ].join("\n"),
-    );
+    this.refreshScoreboard();
 
     const showStatus = this.matchState.phase !== "playing";
     this.statusMessage.setText(this.getMatchStatusText());
     this.statusMessage.setVisible(showStatus);
     this.statusPanel.setVisible(showStatus);
     this.positionMatchStatus(this.scale.width, this.scale.height);
+  }
+
+  private refreshScoreboard(): void {
+    const rows = ["SCORE"];
+    for (const player of this.players) {
+      rows.push(
+        `P${player.colorIndex + 1} ${this.matchState.scores[player.id] ?? 0}`,
+      );
+      const specialWeapon = player.weapons.specialWeapon;
+      if (specialWeapon !== null) {
+        const ammo =
+          specialWeapon.ammoRemaining === null
+            ? ""
+            : ` x${specialWeapon.ammoRemaining}`;
+        rows.push(`  [${specialWeapon.hudIcon}]${ammo}`);
+      }
+    }
+    this.scoreboard.setText(rows.join("\n"));
   }
 
   private getMatchStatusText(): string {
@@ -478,6 +540,8 @@ export class GameScene extends Phaser.Scene {
   private startNextRound(): void {
     this.generateRoundMaze();
     this.bullets = [];
+    this.crates = [];
+    this.crateSpawnRemaining = config.powerups.crateSpawnInterval;
     const spawnPoints = this.getSpawnPoints();
     for (const [index, player] of this.players.entries()) {
       const spawn = spawnPoints[index]!;
@@ -487,7 +551,7 @@ export class GameScene extends Phaser.Scene {
         angle: spawn.angle,
       };
       player.alive = true;
-      player.fireCooldown = 0;
+      player.weapons.reset();
     }
     this.drawMaze(
       this.boardLeft,
@@ -528,7 +592,7 @@ export class GameScene extends Phaser.Scene {
       },
       alive: true,
       inputSource,
-      fireCooldown: 0,
+      weapons: new WeaponLoadout(),
       graphics,
       marker,
     };
@@ -593,6 +657,7 @@ export class GameScene extends Phaser.Scene {
       config.bullet,
     );
     this.bullets = nextState.bullets;
+    let weaponChanged = false;
     for (const event of nextState.events) {
       if (event.type === "bounce") {
         soundEffects.playBounce();
@@ -601,6 +666,7 @@ export class GameScene extends Phaser.Scene {
 
       const player = this.players.find(({ id }) => id === event.tankId);
       if (player !== undefined) {
+        weaponChanged = player.weapons.clearSpecial() || weaponChanged;
         this.explosions.push({
           x: event.x,
           y: event.y,
@@ -609,6 +675,9 @@ export class GameScene extends Phaser.Scene {
         });
         soundEffects.playExplosion();
       }
+    }
+    if (weaponChanged) {
+      this.refreshScoreboard();
     }
     for (const tank of nextState.tanks) {
       const player = this.players.find(({ id }) => id === tank.id);
@@ -621,10 +690,8 @@ export class GameScene extends Phaser.Scene {
   private updateFiring(
     player: LocalPlayer,
     input: PlayerInput,
-    deltaSeconds: number,
   ): void {
-    player.fireCooldown = Math.max(0, player.fireCooldown - deltaSeconds);
-    if (!input.fire || player.fireCooldown > 0) {
+    if (!input.fire) {
       return;
     }
 
@@ -633,17 +700,23 @@ export class GameScene extends Phaser.Scene {
       x: player.tank.x + Math.cos(player.tank.angle) * muzzleDistance,
       y: player.tank.y + Math.sin(player.tank.angle) * muzzleDistance,
     };
-    const bullet = tryCreateBullet(
-      player.id,
+    const hadSpecialWeapon = player.weapons.specialWeapon !== null;
+    const result = player.weapons.fire({
+      ownerId: player.id,
       origin,
-      player.tank.angle,
-      this.bullets,
-      config.bullet,
-    );
-    if (bullet !== null) {
-      this.bullets.push(bullet);
-      player.fireCooldown = config.bullet.fireCooldown;
+      angle: player.tank.angle,
+      activeBullets: this.bullets,
+      bulletSettings: config.bullet,
+    });
+    if (result.bullets.length > 0) {
+      this.bullets.push(...result.bullets);
       soundEffects.playFire();
+    }
+    if (
+      hadSpecialWeapon &&
+      (result.bullets.length > 0 || result.specialExpired)
+    ) {
+      this.refreshScoreboard();
     }
   }
 
@@ -668,6 +741,161 @@ export class GameScene extends Phaser.Scene {
         this.boardTop + bullet.y * this.displayScale,
         bullet.radius * this.displayScale,
       );
+    }
+  }
+
+  private updateCrates(deltaSeconds: number): void {
+    this.crates = this.crates.map((crate) => ({
+      ...crate,
+      elapsed: crate.elapsed + deltaSeconds,
+    }));
+    this.crateSpawnRemaining -= deltaSeconds;
+    if (this.crateSpawnRemaining <= 0) {
+      if (config.powerups.crateSpawnInterval <= 0) {
+        throw new RangeError("Crate spawn interval must be greater than zero.");
+      }
+      this.crateSpawnRemaining += config.powerups.crateSpawnInterval;
+      const spawnedCrate = spawnPowerupCrate(
+        this.maze,
+        this.crates,
+        this.players.map((player) => ({
+          x: player.tank.x,
+          y: player.tank.y,
+          radius: config.tank.radius,
+          alive: player.alive,
+        })),
+        {
+          maxCrates: config.powerups.maxCrates,
+          cellSize: config.maze.cellSize,
+          wallThickness: config.maze.wallThickness,
+          crateRadius: config.powerups.crateRadius,
+        },
+        config.powerups.crateWeights,
+        this.random,
+      );
+      if (spawnedCrate !== null) {
+        this.crates.push({ ...spawnedCrate, elapsed: 0 });
+      }
+    }
+
+    for (let crateIndex = this.crates.length - 1; crateIndex >= 0; crateIndex -= 1) {
+      const crate = this.crates[crateIndex]!;
+      const player = this.players.find((candidate) =>
+        tankTouchesCrate(
+          {
+            x: candidate.tank.x,
+            y: candidate.tank.y,
+            radius: config.tank.radius,
+            alive: candidate.alive,
+          },
+          crate,
+          config.maze.cellSize,
+          config.powerups.crateRadius,
+        ),
+      );
+      if (player === undefined) {
+        continue;
+      }
+
+      const center = crateCenter(crate, config.maze.cellSize);
+      player.weapons.pickUp(createSpecialWeapon(crate.weaponId));
+      this.pickupEffects.push({ ...center, elapsed: 0 });
+      this.crates.splice(crateIndex, 1);
+      soundEffects.playPickup();
+      this.refreshScoreboard();
+    }
+  }
+
+  private drawCrates(): void {
+    const graphics = this.crateGraphics;
+    graphics.clear();
+    for (const crate of this.crates) {
+      const center = crateCenter(crate, config.maze.cellSize);
+      const spawnProgress = Math.min(
+        1,
+        crate.elapsed / config.powerups.crateSpawnInDuration,
+      );
+      const scale =
+        config.presentation.powerupCrateSpawnStartScale +
+        (1 - config.presentation.powerupCrateSpawnStartScale) *
+          spawnProgress;
+      const size = config.powerups.crateRadius * 2 * this.displayScale * scale;
+      const x = this.boardLeft + center.x * this.displayScale;
+      const y = this.boardTop + center.y * this.displayScale;
+      const alpha = spawnProgress;
+
+      graphics.fillStyle(config.presentation.powerupCrateFillColor, alpha);
+      graphics.fillRect(x - size / 2, y - size / 2, size, size);
+      graphics.lineStyle(
+        config.presentation.powerupCrateBorderThickness * this.displayScale,
+        config.presentation.powerupCrateBorderColor,
+        alpha,
+      );
+      graphics.strokeRect(x - size / 2, y - size / 2, size, size);
+
+      const iconSize =
+        size * config.presentation.powerupCrateIconScale;
+      const iconBarHeight =
+        iconSize * config.presentation.powerupCrateIconBarHeightScale;
+      const iconBarOffset =
+        iconSize * config.presentation.powerupCrateIconBarCenterOffsetScale;
+      graphics.fillStyle(config.presentation.powerupCrateIconColor, alpha);
+      graphics.fillRect(
+        x - iconSize / 2,
+        y - iconBarOffset - iconBarHeight / 2,
+        iconSize,
+        iconBarHeight,
+      );
+      graphics.fillRect(
+        x - iconSize / 2,
+        y + iconBarOffset - iconBarHeight / 2,
+        iconSize,
+        iconBarHeight,
+      );
+    }
+  }
+
+  private updatePickupEffects(deltaSeconds: number): void {
+    this.pickupEffects = this.pickupEffects
+      .map((effect) => ({
+        ...effect,
+        elapsed: effect.elapsed + deltaSeconds,
+      }))
+      .filter(
+        (effect) => effect.elapsed < config.powerups.pickupEffectDuration,
+      );
+  }
+
+  private drawPickupEffects(): void {
+    const graphics = this.pickupGraphics;
+    graphics.clear();
+    for (const effect of this.pickupEffects) {
+      const progress = effect.elapsed / config.powerups.pickupEffectDuration;
+      const radius =
+        config.powerups.crateRadius *
+        this.displayScale *
+        (config.presentation.powerupPickupRingStartScale +
+          (config.presentation.powerupPickupRingEndScale -
+            config.presentation.powerupPickupRingStartScale) *
+            progress);
+      graphics.lineStyle(
+        config.presentation.powerupPickupRingThickness * this.displayScale,
+        config.presentation.powerupPickupColor,
+        1 - progress,
+      );
+      graphics.strokeCircle(
+        this.boardLeft + effect.x * this.displayScale,
+        this.boardTop + effect.y * this.displayScale,
+        radius,
+      );
+    }
+  }
+
+  private clearRoundPowerups(): void {
+    this.crates = [];
+    this.crateSpawnRemaining = config.powerups.crateSpawnInterval;
+    for (const player of this.players) {
+      player.weapons.reset();
     }
   }
 

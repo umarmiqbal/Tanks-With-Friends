@@ -1,14 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { generateMaze } from "../src/game/maze";
-
-const seededRandom = (seed: number): (() => number) => () => {
-  seed = (seed * 1664525 + 1013904223) % 4294967296;
-  return seed / 4294967296;
-};
+import { createSeededRandom } from "../src/game/random";
 
 describe("generateMaze", () => {
   it("creates a connected maze and keeps shared walls consistent", () => {
-    const maze = generateMaze(8, 6, 7, seededRandom(42));
+    const maze = generateMaze(8, 6, 7, createSeededRandom(42));
     const reached = new Set(["0,0"]);
     const queue = [{ column: 0, row: 0 }];
 
@@ -50,7 +46,7 @@ describe("generateMaze", () => {
     const columns = 5;
     const rows = 4;
     const openings = 5;
-    const maze = generateMaze(columns, rows, openings, seededRandom(7));
+    const maze = generateMaze(columns, rows, openings, createSeededRandom(7));
     let openInteriorWalls = 0;
 
     for (let row = 0; row < rows; row += 1) {
@@ -68,8 +64,9 @@ describe("generateMaze", () => {
   });
 
   it("rejects invalid dimensions and opening counts", () => {
-    expect(() => generateMaze(0, 2, 0)).toThrow(RangeError);
-    expect(() => generateMaze(2, 1.5, 0)).toThrow(RangeError);
-    expect(() => generateMaze(2, 2, -1)).toThrow(RangeError);
+    const random = createSeededRandom(1);
+    expect(() => generateMaze(0, 2, 0, random)).toThrow(RangeError);
+    expect(() => generateMaze(2, 1.5, 0, random)).toThrow(RangeError);
+    expect(() => generateMaze(2, 2, -1, random)).toThrow(RangeError);
   });
 });

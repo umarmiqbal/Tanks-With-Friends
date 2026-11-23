@@ -1,4 +1,5 @@
 import { config } from "../config";
+import { createSeededRandom, type RandomSource } from "../game/random";
 
 export class SoundEffects {
   private context: AudioContext | null = null;
@@ -9,6 +10,9 @@ export class SoundEffects {
     private readonly createContext: () => AudioContext = () =>
       new AudioContext(),
     muted: boolean = config.audio.mutedByDefault,
+    private readonly random: RandomSource = createSeededRandom(
+      config.audio.noiseSeed,
+    ),
   ) {
     this.muted = muted;
   }
@@ -92,6 +96,20 @@ export class SoundEffects {
     });
   }
 
+  playPickup(): void {
+    const context = this.getContext();
+    if (context === null) {
+      return;
+    }
+    this.playTone(
+      context,
+      config.audio.pickupStartFrequency,
+      config.audio.pickupEndFrequency,
+      config.audio.pickupDuration,
+      config.audio.pickupWaveform,
+    );
+  }
+
   private getContext(): AudioContext | null {
     if (this.muted || this.contextUnavailable) {
       return null;
@@ -154,7 +172,7 @@ export class SoundEffects {
     const buffer = context.createBuffer(1, frameCount, context.sampleRate);
     const samples = buffer.getChannelData(0);
     for (let frame = 0; frame < frameCount; frame += 1) {
-      samples[frame] = (Math.random() * 2 - 1) * (1 - frame / frameCount);
+      samples[frame] = (this.random() * 2 - 1) * (1 - frame / frameCount);
     }
 
     const source = context.createBufferSource();

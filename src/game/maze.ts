@@ -1,3 +1,5 @@
+import { randomIndex, type RandomSource } from "./random";
+
 export interface MazeCell {
   walls: {
     top: boolean;
@@ -36,14 +38,11 @@ const neighborsFor = (column: number, row: number): Neighbor[] => [
   { column: column - 1, row, wall: "left", oppositeWall: "right" },
 ];
 
-const randomIndex = (length: number, random: () => number): number =>
-  Math.min(Math.floor(random() * length), length - 1);
-
 export function generateMaze(
   columns: number,
   rows: number,
   extraOpenings: number,
-  random: () => number = Math.random,
+  random: RandomSource,
 ): Maze {
   if (!Number.isInteger(columns) || columns < 1) {
     throw new RangeError("Maze columns must be a positive integer.");

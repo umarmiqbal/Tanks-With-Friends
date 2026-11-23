@@ -27,8 +27,8 @@ runtime.
 - End a round when at most one tank remains. Award the survivor one point,
   display a brief round-over banner, then create a new maze and respawn all
   players at spread-out positions. End the match at the configured score.
-- Keep stretch power-ups (laser, shotgun, shield, homing missile) out of scope
-  until explicitly requested.
+- Special weapons and powerups are introduced milestone-by-milestone; see
+  **Powerups** below for the current scope.
 
 ## Architecture
 
@@ -38,9 +38,12 @@ runtime.
 - Use Phaser 3 for presentation and Vite for development and bundling.
 - Advance gameplay on a fixed timestep (60 Hz by default), using an accumulator
   so outcomes are independent of rendering frame rate.
+- Route gameplay randomness through an injectable seeded random source so
+  maze and powerup behavior can be reproduced in tests.
 - Store gameplay tunables in `src/config.ts`: simulation step; maze dimensions,
   cell size, openings, and wall thickness; tank and bullet parameters;
-  score-to-win; input dead zones; and presentation/audio settings.
+  score-to-win; input dead zones; powerup weights and timings; and
+  presentation/audio settings.
 
 ## Input and lobby
 
@@ -68,7 +71,20 @@ runtime.
 - Keep visuals high-contrast and readable on a television. Tank color and
   player number both distinguish players.
 - Generate fire, bounce, explosion, and round-win sounds with the Web Audio API
-  behind one muteable audio module.
+  behind one muteable audio module. Powerup pickups also have a distinct sound.
+
+## Powerups
+
+- M9 crates spawn at fixed intervals in valid maze cells, up to a configurable
+  simultaneous cap. Weighted selection is driven by the match's seeded random
+  source. Crates avoid living tanks and other crates, and animate in.
+- A tank keeps its default cannon and at most one special weapon. Collecting a
+  special replaces the previous one; death and round end clear the special
+  without dropping it. Crates are cleared at round end.
+- The M9 placeholder special is **Double Shot**: each trigger fires two parallel
+  bullets, consumes one ammo charge, and is limited by both ammo and a timer.
+  The scoreboard shows its `[2X]` icon and remaining ammo.
+- M10 and later powerups are out of scope for M9.
 
 ## Milestones
 
@@ -84,6 +100,8 @@ runtime.
 6. **M6 — Rounds:** respawn, scoring, scoreboard, and match end.
 7. **M7 — Lobby:** join-by-button for six players and disconnect handling.
 8. **M8 — Polish:** procedural effects, explosion visuals, and audio.
+9. **M9 — Weapon framework and crates:** default cannon interface, Double Shot,
+   weighted crate spawning, pickup feedback, and weapon HUD.
 
 Each milestone is validated with `npx tsc --noEmit`, `npm test`, and
 `npm run build`, then committed before playtesting. Work stops at each
@@ -118,6 +136,15 @@ milestone boundary for player feedback.
 - Player colors and numbers follow join order and remain assigned for the match.
 - Audio is synthesized with Web Audio oscillators and noise; the in-game
   sound toggle mutes every effect.
+- One gameplay RNG is seeded when a match starts and shared by maze generation
+  and crate placement/selection. Audio noise uses its own seeded source.
+- M9 crates first spawn after the configured interval. If the crate cap is
+  reached or no valid cell is available, the next attempt waits for another
+  interval. On a simultaneous pickup, the earliest joined living player gets
+  the crate.
+- Double Shot fires parallel projectiles and spends one charge per volley. The
+  volley is all-or-nothing if the owner's bullet cap cannot fit both shots.
+  Specials reset on death or round end; no weapon crates are dropped.
 - If all tanks are destroyed in the same round, it is a draw and no player
   receives a point.
 - The M6 scoreboard is a vertical list in a reserved right-side column so it

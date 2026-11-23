@@ -14,6 +14,7 @@ describe("SoundEffects", () => {
     sound.playBounce();
     sound.playExplosion();
     sound.playRoundWin();
+    sound.playPickup();
 
     expect(sound.isMuted).toBe(true);
     expect(sound.toggleMuted()).toBe(false);

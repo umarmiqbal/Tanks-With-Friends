@@ -4,6 +4,7 @@ import {
   pressLobbyDevice,
   setLobbyDeviceConnection,
 } from "../game/lobby";
+import { createRandomSeed } from "../game/random";
 import type { LobbyPlayer, PlayerDevice, PlayerSetup } from "../game/playerSetup";
 import { GamepadInput } from "../input/GamepadInput";
 import { KeyboardInput } from "../input/KeyboardInput";
@@ -205,7 +206,7 @@ export class LobbyScene extends Phaser.Scene {
     const players: PlayerSetup[] = this.players.map(
       ({ connected: _connected, ...setup }) => setup,
     );
-    this.scene.start("game", { players });
+    this.scene.start("game", { players, randomSeed: createRandomSeed() });
   }
 
   private deviceName(device: PlayerDevice): string {
