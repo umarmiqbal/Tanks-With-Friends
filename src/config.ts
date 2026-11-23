@@ -32,6 +32,7 @@ export const config = {
   match: {
     scoreToWin: 5,
     roundOverDuration: 2.5,
+    preLobbyPlayerCount: 2,
   },
   input: {
     gamepadDeadZone: 0.18,

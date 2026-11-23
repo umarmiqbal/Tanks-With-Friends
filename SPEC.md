@@ -109,3 +109,7 @@ milestone boundary for player feedback.
   right-stick input optionally overrides steering, and D-pad input takes
   precedence on the same axis. Disconnecting a detected controller pauses
   until a controller reconnects.
+- Before the lobby exists, M5 starts two players: player 1 uses gamepad 0 with
+  the first keyboard scheme as fallback, and player 2 uses the arrow keys.
+  Their positions are spread across the maze; M7 will replace this fixed roster
+  with lobby joins.

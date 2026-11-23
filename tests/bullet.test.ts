@@ -28,12 +28,18 @@ const bullet = (
   velocityY: 0,
   radius: 1,
   remainingLifetime: 8,
+  bounceCount: 0,
   ...overrides,
 });
 
 describe("advanceBullet", () => {
   it("reflects a head-on hit", () => {
-    const advanced = advanceBullet(bullet(), 0.2, [verticalWall], settings);
+    const { bullet: advanced } = advanceBullet(
+      bullet(),
+      0.2,
+      [verticalWall],
+      settings,
+    );
 
     expect(advanced).not.toBeNull();
     expect(advanced!.velocityX).toBe(-100);
@@ -41,7 +47,7 @@ describe("advanceBullet", () => {
   });
 
   it("reflects only the normal component on a glancing hit", () => {
-    const advanced = advanceBullet(
+    const { bullet: advanced } = advanceBullet(
       bullet({ velocityY: 50 }),
       0.2,
       [verticalWall],
@@ -56,7 +62,7 @@ describe("advanceBullet", () => {
 
   it("reflects both velocity components at a corner", () => {
     const corner: WallRect = { left: 10, top: 10, right: 12, bottom: 12 };
-    const advanced = advanceBullet(
+    const { bullet: advanced } = advanceBullet(
       bullet({ velocityY: 100 }),
       0.2,
       [corner],
@@ -71,7 +77,7 @@ describe("advanceBullet", () => {
   });
 
   it("detects a wall crossed in one fast frame", () => {
-    const advanced = advanceBullet(
+    const { bullet: advanced } = advanceBullet(
       bullet({ velocityX: 1000 }),
       0.02,
       [verticalWall],
@@ -84,7 +90,7 @@ describe("advanceBullet", () => {
   });
 
   it("expires after its lifetime, even when the update exceeds the remaining time", () => {
-    const advanced = advanceBullet(
+    const { bullet: advanced } = advanceBullet(
       bullet({ remainingLifetime: 0.05 }),
       0.1,
       [],
@@ -95,7 +101,7 @@ describe("advanceBullet", () => {
   });
 
   it("decreases lifetime while moving", () => {
-    const advanced = advanceBullet(
+    const { bullet: advanced } = advanceBullet(
       bullet({ remainingLifetime: 0.2 }),
       0.05,
       [],

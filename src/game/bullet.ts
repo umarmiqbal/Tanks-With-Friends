@@ -8,6 +8,20 @@ export interface BulletState {
   velocityY: number;
   radius: number;
   remainingLifetime: number;
+  bounceCount: number;
+}
+
+export interface BulletTarget {
+  id: string;
+  x: number;
+  y: number;
+  radius: number;
+  alive: boolean;
+}
+
+export interface BulletAdvanceResult {
+  bullet: BulletState | null;
+  hitTankId: string | null;
 }
 
 export interface BulletSettings {
@@ -23,6 +37,14 @@ interface SweepHit {
   normalX: number;
   normalY: number;
 }
+
+const getTimeTolerance = (
+  deltaX: number,
+  deltaY: number,
+  collisionEpsilon: number,
+): number =>
+  collisionEpsilon /
+  Math.max(Math.abs(deltaX), Math.abs(deltaY), collisionEpsilon);
 
 const sweepPointAgainstWall = (
   x: number,
@@ -93,6 +115,59 @@ const sweepPointAgainstWall = (
   };
 };
 
+function findFirstTankHit(
+  bullet: BulletState,
+  deltaX: number,
+  deltaY: number,
+  targets: readonly BulletTarget[],
+  timeTolerance: number,
+): { time: number; tankId: string } | null {
+  let firstHit: { time: number; tankId: string } | null = null;
+  const movementSquared = deltaX ** 2 + deltaY ** 2;
+  if (movementSquared === 0) {
+    return null;
+  }
+
+  for (const target of targets) {
+    if (
+      !target.alive ||
+      (target.id === bullet.ownerId && bullet.bounceCount === 0)
+    ) {
+      continue;
+    }
+
+    const offsetX = bullet.x - target.x;
+    const offsetY = bullet.y - target.y;
+    const combinedRadius = bullet.radius + target.radius;
+    const startDistanceSquared = offsetX ** 2 + offsetY ** 2;
+    let hitTime: number;
+
+    if (startDistanceSquared <= combinedRadius ** 2) {
+      hitTime = 0;
+    } else {
+      const projection = offsetX * deltaX + offsetY * deltaY;
+      const discriminant =
+        projection ** 2 -
+        movementSquared * (startDistanceSquared - combinedRadius ** 2);
+      if (projection >= 0 || discriminant < 0) {
+        continue;
+      }
+
+      hitTime = (-projection - Math.sqrt(discriminant)) / movementSquared;
+      if (hitTime < -timeTolerance || hitTime > 1 + timeTolerance) {
+        continue;
+      }
+      hitTime = Math.max(0, Math.min(hitTime, 1));
+    }
+
+    if (firstHit === null || hitTime < firstHit.time) {
+      firstHit = { time: hitTime, tankId: target.id };
+    }
+  }
+
+  return firstHit;
+}
+
 function findFirstHit(
   bullet: BulletState,
   deltaX: number,
@@ -100,8 +175,11 @@ function findFirstHit(
   walls: readonly WallRect[],
   collisionEpsilon: number,
 ): SweepHit | null {
-  const distance = Math.max(Math.abs(deltaX), Math.abs(deltaY));
-  const timeTolerance = collisionEpsilon / Math.max(distance, collisionEpsilon);
+  const timeTolerance = getTimeTolerance(
+    deltaX,
+    deltaY,
+    collisionEpsilon,
+  );
   let firstHit: SweepHit | null = null;
 
   for (const wall of walls) {
@@ -151,6 +229,7 @@ export function tryCreateBullet(
     velocityY: Math.sin(angle) * settings.speed,
     radius: settings.radius,
     remainingLifetime: settings.lifetime,
+    bounceCount: 0,
   };
 }
 
@@ -159,9 +238,10 @@ export function advanceBullet(
   deltaSeconds: number,
   walls: readonly WallRect[],
   settings: Pick<BulletSettings, "collisionEpsilon">,
-): BulletState | null {
+  targets: readonly BulletTarget[] = [],
+): BulletAdvanceResult {
   if (bullet.remainingLifetime <= 0) {
-    return null;
+    return { bullet: null, hitTankId: null };
   }
 
   const activeTime = Math.min(deltaSeconds, bullet.remainingLifetime);
@@ -181,6 +261,25 @@ export function advanceBullet(
       walls,
       settings.collisionEpsilon,
     );
+    const timeTolerance = getTimeTolerance(
+      deltaX,
+      deltaY,
+      settings.collisionEpsilon,
+    );
+    const tankHit = findFirstTankHit(
+      { ...bullet, x, y },
+      deltaX,
+      deltaY,
+      targets,
+      timeTolerance,
+    );
+
+    if (
+      tankHit !== null &&
+      (hit === null || tankHit.time < hit.time - timeTolerance)
+    ) {
+      return { bullet: null, hitTankId: tankHit.tankId };
+    }
 
     if (hit === null) {
       x += deltaX;
@@ -198,13 +297,17 @@ export function advanceBullet(
       velocityY = -velocityY;
       y += hit.normalY * settings.collisionEpsilon;
     }
+    bullet = { ...bullet, bounceCount: bullet.bounceCount + 1 };
     remainingTime *= 1 - hit.time;
   }
 
   const remainingLifetime = bullet.remainingLifetime - deltaSeconds;
   if (remainingLifetime <= 0) {
-    return null;
+    return { bullet: null, hitTankId: null };
   }
 
-  return { ...bullet, x, y, velocityX, velocityY, remainingLifetime };
+  return {
+    bullet: { ...bullet, x, y, velocityX, velocityY, remainingLifetime },
+    hitTankId: null,
+  };
 }
