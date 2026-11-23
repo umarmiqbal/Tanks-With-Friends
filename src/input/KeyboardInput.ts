@@ -1,6 +1,7 @@
 import type { InputSource, PlayerInput } from "./InputSource";
 
 export interface KeyboardScheme {
+  label: string;
   forward: string;
   backward: string;
   turnLeft: string;
@@ -29,7 +30,13 @@ export class KeyboardInput implements InputSource {
     private readonly target: EventTarget,
     private readonly scheme: KeyboardScheme,
   ) {
-    this.controlledKeys = new Set(Object.values(scheme));
+    this.controlledKeys = new Set([
+      scheme.forward,
+      scheme.backward,
+      scheme.turnLeft,
+      scheme.turnRight,
+      scheme.fire,
+    ]);
     target.addEventListener("keydown", this.onKeyDown);
     target.addEventListener("keyup", this.onKeyUp);
     target.addEventListener("blur", this.onBlur);

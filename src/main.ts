@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { config } from "./config";
 import { GameScene } from "./scenes/GameScene";
+import { LobbyScene } from "./scenes/LobbyScene";
 import "./style.css";
 
 new Phaser.Game({
@@ -12,5 +13,5 @@ new Phaser.Game({
     width: window.innerWidth,
     height: window.innerHeight,
   },
-  scene: [GameScene],
+  scene: [LobbyScene, GameScene],
 });

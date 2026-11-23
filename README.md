@@ -37,13 +37,16 @@ The test suite uses Vitest. The production build is written to `dist/`.
 
 ## Current milestone
 
-M6 renders a generated maze with two tanks, combat, rounds, and a scoreboard.
+M7 adds a lobby before the match. Press **Space**, **Enter**, or another
+keyboard scheme's fire key to join, or press any button on a Standard-mapped
+controller. A joined player presses that same fire input again to start; all
+joined controllers must be connected. Up to six players can join. If a
+controller disconnects during a match, play pauses and identifies the affected
+player until it reconnects.
+
 The scoreboard is stacked vertically on the right, and the first player to
-five points wins. Player 1 uses the
-gamepad at index 0 when active, or **W/S** to drive, **A/D** to turn, and
-**Space** to fire. Player 2 uses the arrow keys to drive/turn and **Enter** to
-fire. On a Standard-mapped gamepad, the left stick drives and turns; horizontal
-right-stick input optionally steers, and the D-pad overrides stick input.
-**A**, **RB**, or **RT** fires. One hit destroys a tank, including its own
-bounced bullets. Disconnecting a detected controller pauses until it
-reconnects. The lobby and presentation/audio polish remain planned milestones.
+five points wins. Keyboard schemes and controller mappings are shown in the
+lobby. Controllers use the left stick for movement and steering, optional
+right-stick horizontal steering, and D-pad overrides; **A**, **RB**, or **RT**
+fires. One hit destroys a tank, including its own bounced bullets.
+Presentation/audio polish remains planned.

@@ -135,6 +135,20 @@ describe("GamepadInput", () => {
     triggerBelowThresholdInput.destroy();
   });
 
+  it("can treat any pressed controller button as the lobby join input", () => {
+    const gamepad = createGamepad({
+      buttons: { 3: { pressed: true } },
+    });
+    const input = new GamepadInput(0, 0.2, 0.5, {
+      target: new EventTarget(),
+      getGamepads: () => [gamepad],
+      fireOnAnyButton: true,
+    });
+
+    expect(input.read().fire).toBe(true);
+    input.destroy();
+  });
+
   it("polls for newly visible controllers and reports connection changes", () => {
     const target = new EventTarget();
     const connectionChanges: boolean[] = [];
@@ -152,6 +166,20 @@ describe("GamepadInput", () => {
     expect(input.read()).toEqual({ move: 0, turn: 0, fire: false });
     expect(connectionChanges).toEqual([true, false]);
 
+    input.destroy();
+  });
+
+  it("reports a disconnect if a controller disappears immediately after joining", () => {
+    const connectionChanges: boolean[] = [];
+    const input = new GamepadInput(0, 0.2, 0.5, {
+      target: new EventTarget(),
+      getGamepads: () => [null],
+      initiallyConnected: true,
+      onConnectionChange: (connected) => connectionChanges.push(connected),
+    });
+
+    expect(input.read()).toEqual({ move: 0, turn: 0, fire: false });
+    expect(connectionChanges).toEqual([false]);
     input.destroy();
   });
 

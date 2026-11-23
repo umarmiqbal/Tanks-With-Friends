@@ -17,8 +17,8 @@ import {
   type TankState,
   type WallRect,
 } from "../game/tankMovement";
+import type { PlayerSetup } from "../game/playerSetup";
 import type { InputSource, PlayerInput } from "../input/InputSource";
-import { CombinedInputSource } from "../input/CombinedInputSource";
 import { GamepadInput } from "../input/GamepadInput";
 import { KeyboardInput } from "../input/KeyboardInput";
 
@@ -30,6 +30,7 @@ interface SpawnPoint {
 
 interface LocalPlayer {
   id: string;
+  colorIndex: number;
   tank: TankState;
   alive: boolean;
   inputSource: InputSource;
@@ -42,11 +43,13 @@ export class GameScene extends Phaser.Scene {
   private maze!: Maze;
   private wallRects!: WallRect[];
   private players: LocalPlayer[] = [];
+  private playerSetups: PlayerSetup[] = [];
   private bullets: BulletState[] = [];
   private matchState!: MatchState;
   private accumulator = 0;
   private controllerDisconnected = false;
   private pausedForDisconnect = false;
+  private readonly disconnectedControllerIds = new Set<string>();
   private displayScale = 1;
   private displayCellSize: number = config.maze.cellSize;
   private boardLeft = 0;
@@ -65,41 +68,33 @@ export class GameScene extends Phaser.Scene {
     super("game");
   }
 
+  init(data: { players: PlayerSetup[] }): void {
+    this.playerSetups = data.players;
+  }
+
   create(): void {
     this.players = [];
     this.bullets = [];
     this.accumulator = 0;
     this.controllerDisconnected = false;
     this.pausedForDisconnect = false;
+    this.disconnectedControllerIds.clear();
     this.generateRoundMaze();
     this.mazeGraphics = this.add.graphics();
     this.bulletGraphics = this.add.graphics().setDepth(1);
-    const gamepadInput = new GamepadInput(
-      config.input.defaultGamepadIndex,
-      config.input.gamepadDeadZone,
-      config.input.gamepadFireThreshold,
-      {
-        onConnectionChange: (connected) =>
-          this.handleControllerConnection(connected),
-      },
-    );
+    if (
+      this.playerSetups.length === 0 ||
+      this.playerSetups.length > config.input.maximumPlayers
+    ) {
+      throw new RangeError(
+        `A match requires between one and ${config.input.maximumPlayers} players.`,
+      );
+    }
     const spawnPoints = this.getSpawnPoints();
-    const playerCount = Math.min(
-      config.match.preLobbyPlayerCount,
-      spawnPoints.length,
-      config.input.keyboardSchemes.length,
-      config.presentation.playerColors.length,
-    );
-    for (let index = 0; index < playerCount; index += 1) {
-      const inputSource =
-        index === 0
-          ? new CombinedInputSource(
-              gamepadInput,
-              new KeyboardInput(window, config.input.keyboardSchemes[index]!),
-            )
-          : new KeyboardInput(window, config.input.keyboardSchemes[index]!);
+    for (const [index, setup] of this.playerSetups.entries()) {
+      const inputSource = this.createInputSource(setup);
       this.players.push(
-        this.createPlayer(index, spawnPoints[index]!, inputSource),
+        this.createPlayer(setup, spawnPoints[index]!, inputSource),
       );
     }
     this.disconnectPanel = this.add.graphics().setDepth(9).setScrollFactor(0);
@@ -322,22 +317,62 @@ export class GameScene extends Phaser.Scene {
     ];
   }
 
-  private handleControllerConnection(connected: boolean): void {
-    this.controllerDisconnected = !connected;
-    this.disconnectPanel.setVisible(!connected);
-    this.disconnectMessage.setVisible(!connected);
+  private createInputSource(setup: PlayerSetup): InputSource {
+    if (setup.device.kind === "keyboard") {
+      const scheme = config.input.keyboardSchemes[setup.device.schemeIndex];
+      if (scheme === undefined) {
+        throw new RangeError("Player has an unknown keyboard scheme.");
+      }
+      return new KeyboardInput(window, scheme);
+    }
 
+    return new GamepadInput(
+      setup.device.gamepadIndex,
+      config.input.gamepadDeadZone,
+      config.input.gamepadFireThreshold,
+      {
+        initiallyConnected: true,
+        onConnectionChange: (connected) =>
+          this.handleControllerConnection(setup.id, connected),
+      },
+    );
+  }
+
+  private handleControllerConnection(
+    playerId: string,
+    connected: boolean,
+  ): void {
     if (connected) {
-      if (this.pausedForDisconnect) {
-        this.pausedForDisconnect = false;
-        this.scene.resume();
+      this.disconnectedControllerIds.delete(playerId);
+    } else {
+      this.disconnectedControllerIds.add(playerId);
+    }
+    this.controllerDisconnected = this.disconnectedControllerIds.size > 0;
+    this.disconnectPanel.setVisible(this.controllerDisconnected);
+    this.disconnectMessage.setVisible(this.controllerDisconnected);
+
+    if (this.controllerDisconnected) {
+      const playerNumbers = [...this.disconnectedControllerIds]
+        .map((id) =>
+          this.players.find((player) => player.id === id)?.colorIndex,
+        )
+        .filter((colorIndex): colorIndex is number => colorIndex !== undefined)
+        .map((colorIndex) => colorIndex + 1);
+      this.disconnectMessage.setText(
+        `PLAYER${playerNumbers.length > 1 ? "S" : ""} ${playerNumbers.join(", ")} CONTROLLER DISCONNECTED\nReconnect to resume`,
+      );
+      this.positionDisconnectNotice(this.scale.width, this.scale.height);
+      if (!this.pausedForDisconnect) {
+        this.pausedForDisconnect = true;
+        this.scene.pause();
       }
       return;
     }
 
-    this.pausedForDisconnect = true;
-    this.positionDisconnectNotice(this.scale.width, this.scale.height);
-    this.scene.pause();
+    if (this.pausedForDisconnect) {
+      this.pausedForDisconnect = false;
+      this.scene.resume();
+    }
   }
 
   private positionDisconnectNotice(width: number, height: number): void {
@@ -360,8 +395,8 @@ export class GameScene extends Phaser.Scene {
       [
         "SCORE",
         ...this.players.map(
-          (player, index) =>
-            `P${index + 1} ${this.matchState.scores[player.id] ?? 0}`,
+          (player) =>
+            `P${player.colorIndex + 1} ${this.matchState.scores[player.id] ?? 0}`,
         ),
       ].join("\n"),
     );
@@ -383,7 +418,7 @@ export class GameScene extends Phaser.Scene {
     const winnerIndex = this.players.findIndex(
       (player) => player.id === this.matchState.winnerId,
     );
-    const winnerLabel = `PLAYER ${winnerIndex + 1}`;
+    const winnerLabel = `PLAYER ${this.players[winnerIndex]!.colorIndex + 1}`;
     return this.matchState.phase === "matchOver"
       ? `${winnerLabel} WINS THE MATCH`
       : `${winnerLabel} WINS ROUND ${this.matchState.round}\nNext round starting`;
@@ -427,13 +462,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   private createPlayer(
-    index: number,
+    setup: PlayerSetup,
     spawn: SpawnPoint,
     inputSource: InputSource,
   ): LocalPlayer {
     const graphics = this.add.graphics().setDepth(2);
     const marker = this.add
-      .text(0, 0, `${index + 1}`, {
+      .text(0, 0, `${setup.colorIndex + 1}`, {
         color: config.presentation.markerColor,
         fontFamily: config.presentation.fontFamily,
         fontSize: `${config.presentation.tankMarkerFontSize}px`,
@@ -441,10 +476,15 @@ export class GameScene extends Phaser.Scene {
       })
       .setOrigin(0.5)
       .setDepth(3);
-    this.drawTank(graphics, config.presentation.playerColors[index]!);
+    const playerColor = config.presentation.playerColors[setup.colorIndex];
+    if (playerColor === undefined) {
+      throw new RangeError("Player has an unknown color slot.");
+    }
+    this.drawTank(graphics, playerColor);
 
     return {
-      id: `player-${index + 1}`,
+      id: setup.id,
+      colorIndex: setup.colorIndex,
       tank: {
         x: (spawn.column + 0.5) * config.maze.cellSize,
         y: (spawn.row + 0.5) * config.maze.cellSize,

@@ -4,6 +4,8 @@ export interface GamepadInputOptions {
   target?: EventTarget;
   getGamepads?: () => ArrayLike<Gamepad | null>;
   onConnectionChange?: (connected: boolean, index: number) => void;
+  fireOnAnyButton?: boolean;
+  initiallyConnected?: boolean;
 }
 
 const normalizeAxis = (value: number, deadZone: number): number => {
@@ -22,6 +24,7 @@ export class GamepadInput implements InputSource {
     connected: boolean,
     index: number,
   ) => void;
+  private readonly fireOnAnyButton: boolean;
   private connected = false;
   private readonly onGamepadConnected = (event: Event): void => {
     const gamepad = (event as GamepadEvent).gamepad;
@@ -55,6 +58,8 @@ export class GamepadInput implements InputSource {
     this.target = options.target ?? window;
     this.getGamepads = options.getGamepads ?? (() => navigator.getGamepads());
     this.onConnectionChange = options.onConnectionChange;
+    this.fireOnAnyButton = options.fireOnAnyButton ?? false;
+    this.connected = options.initiallyConnected ?? false;
     this.target.addEventListener("gamepadconnected", this.onGamepadConnected);
     this.target.addEventListener(
       "gamepaddisconnected",
@@ -88,9 +93,16 @@ export class GamepadInput implements InputSource {
             ? rightStickTurn
             : stickTurn,
       fire:
-        this.isButtonPressed(gamepad, 0) ||
-        this.isButtonPressed(gamepad, 5) ||
-        this.isButtonPressed(gamepad, 7),
+        this.fireOnAnyButton
+          ? gamepad.buttons.some(
+              (button) =>
+                button.pressed ||
+                (button.value > 0 &&
+                  button.value >= this.fireButtonThreshold),
+            )
+          : this.isButtonPressed(gamepad, 0) ||
+            this.isButtonPressed(gamepad, 5) ||
+            this.isButtonPressed(gamepad, 7),
     };
   }
 

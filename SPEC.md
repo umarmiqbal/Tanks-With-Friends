@@ -55,8 +55,11 @@ runtime.
 - If a controller disconnects mid-match, pause and identify the affected
   player.
 - In the lobby, players join by pressing their controller or keyboard scheme's
-  fire key. Show a colored card and input device for each joined slot, up to six.
-  Start when all intended players have joined and one confirms.
+  fire key. A gamepad joins on any button press; keyboard schemes join on their
+  configured fire key. Show six player cards with color, player number, input
+  device, and connection status. A joined device pressing its join input again
+  confirms the start. Only joined devices participate; every joined controller
+  must be connected before the match can start.
 
 ## Visuals and audio
 
@@ -104,15 +107,15 @@ milestone boundary for player feedback.
   begin at creation.
 - Bullets default to a 5-second lifetime; the value remains configurable in
   `src/config.ts`.
-- M4 defaults to gamepad index 0 and keeps the keyboard scheme available as a
-  fallback. The left stick keeps both movement and steering; horizontal
+- Gamepads use browser indices, and the lobby scans controller indices 0
+  through 5. The left stick keeps both movement and steering; horizontal
   right-stick input optionally overrides steering, and D-pad input takes
-  precedence on the same axis. Disconnecting a detected controller pauses
-  until a controller reconnects.
-- Before the lobby exists, M5 starts two players: player 1 uses gamepad 0 with
-  the first keyboard scheme as fallback, and player 2 uses the arrow keys.
-  Their positions are spread across the maze; M7 will replace this fixed roster
-  with lobby joins.
+  precedence on the same axis. In the lobby any gamepad button can join, while
+  A, RB, or RT remains the in-match fire mapping. A joined player confirms the
+  start by pressing its join input again; a single joined player may start, but
+  all joined controllers must be connected. A disconnect during a match pauses
+  play until all affected controllers reconnect.
+- Player colors and numbers follow join order and remain assigned for the match.
 - If all tanks are destroyed in the same round, it is a draw and no player
   receives a point.
 - The M6 scoreboard is a vertical list in a reserved right-side column so it

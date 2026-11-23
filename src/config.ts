@@ -32,15 +32,16 @@ export const config = {
   match: {
     scoreToWin: 5,
     roundOverDuration: 2.5,
-    preLobbyPlayerCount: 2,
   },
   input: {
     gamepadDeadZone: 0.18,
     gamepadFireThreshold: 0.5,
-    defaultGamepadIndex: 0,
+    gamepadIndexScanCount: 6,
+    maximumPlayers: 6,
     keyboardDeadZone: 0.1,
     keyboardSchemes: [
       {
+        label: "WASD + Space",
         forward: "KeyW",
         backward: "KeyS",
         turnLeft: "KeyA",
@@ -48,6 +49,7 @@ export const config = {
         fire: "Space",
       },
       {
+        label: "Arrows + Enter",
         forward: "ArrowUp",
         backward: "ArrowDown",
         turnLeft: "ArrowLeft",
@@ -55,6 +57,7 @@ export const config = {
         fire: "Enter",
       },
       {
+        label: "IJKL + O",
         forward: "KeyI",
         backward: "KeyK",
         turnLeft: "KeyJ",
@@ -62,6 +65,7 @@ export const config = {
         fire: "KeyO",
       },
       {
+        label: "TFGH + Y",
         forward: "KeyT",
         backward: "KeyG",
         turnLeft: "KeyF",
@@ -69,6 +73,7 @@ export const config = {
         fire: "KeyY",
       },
       {
+        label: "Numpad + 0",
         forward: "Numpad8",
         backward: "Numpad5",
         turnLeft: "Numpad4",
@@ -76,6 +81,7 @@ export const config = {
         fire: "Numpad0",
       },
       {
+        label: "ZXCV + B",
         forward: "KeyZ",
         backward: "KeyC",
         turnLeft: "KeyX",
@@ -110,6 +116,24 @@ export const config = {
     statusColor: "#f5f7fa",
     statusPanelColor: 0x101820,
     statusPanelPadding: 30,
+    lobbyInfoFontSize: 20,
+    lobbyCardFontSize: 18,
+    lobbyCardWidth: 350,
+    lobbyCardHeight: 120,
+    lobbyCardGap: 24,
+    lobbyColumns: 3,
+    lobbyGridTopOffset: 250,
+    lobbyFooterTopOffset: 560,
+    lobbyFooterBottomOffset: 32,
+    lobbyTitleOffset: 28,
+    lobbyInstructionsTop: 132,
+    lobbyControlsTop: 190,
+    lobbyCardPadding: 18,
+    lobbyCardBorderThickness: 4,
+    lobbyCardBackgroundColor: 0x182631,
+    lobbyEmptyBorderColor: 0x52606b,
+    lobbyCardTextColor: "#f5f7fa",
+    lobbyInfoColor: "#a9bac7",
     minimumCellSize: 1,
     boardPadding: 32,
     titleTopOffset: 24,
