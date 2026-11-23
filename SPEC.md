@@ -116,6 +116,8 @@ milestone boundary for player feedback.
   all joined controllers must be connected. A disconnect during a match pauses
   play until all affected controllers reconnect.
 - Player colors and numbers follow join order and remain assigned for the match.
+- Audio is synthesized with Web Audio oscillators and noise; the in-game
+  sound toggle mutes every effect.
 - If all tanks are destroyed in the same round, it is a draw and no player
   receives a point.
 - The M6 scoreboard is a vertical list in a reserved right-side column so it

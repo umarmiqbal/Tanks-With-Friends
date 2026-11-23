@@ -37,16 +37,18 @@ The test suite uses Vitest. The production build is written to `dist/`.
 
 ## Current milestone
 
-M7 adds a lobby before the match. Press **Space**, **Enter**, or another
-keyboard scheme's fire key to join, or press any button on a Standard-mapped
-controller. A joined player presses that same fire input again to start; all
-joined controllers must be connected. Up to six players can join. If a
-controller disconnects during a match, play pauses and identifies the affected
-player until it reconnects.
+M8 builds on the M7 lobby: press **Space**, **Enter**, or another keyboard
+scheme's fire key to join, or press any button on a Standard-mapped controller.
+A joined player presses that same fire input again to start; all joined
+controllers must be connected. Up to six players can join. If a controller
+disconnects during a match, play pauses and identifies the affected player
+until it reconnects.
 
 The scoreboard is stacked vertically on the right, and the first player to
 five points wins. Keyboard schemes and controller mappings are shown in the
 lobby. Controllers use the left stick for movement and steering, optional
 right-stick horizontal steering, and D-pad overrides; **A**, **RB**, or **RT**
 fires. One hit destroys a tank, including its own bounced bullets.
-Presentation/audio polish remains planned.
+Tank explosions and glowing bullets are drawn procedurally. Fire, bounce,
+explosion, and round-win sounds are synthesized in the browser; click the
+**SOUND ON/OFF** label in the upper-right to mute or unmute them.

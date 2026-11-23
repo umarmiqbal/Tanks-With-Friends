@@ -22,6 +22,7 @@ export interface BulletTarget {
 export interface BulletAdvanceResult {
   bullet: BulletState | null;
   hitTankId: string | null;
+  bounceCount: number;
 }
 
 export interface BulletSettings {
@@ -241,7 +242,7 @@ export function advanceBullet(
   targets: readonly BulletTarget[] = [],
 ): BulletAdvanceResult {
   if (bullet.remainingLifetime <= 0) {
-    return { bullet: null, hitTankId: null };
+    return { bullet: null, hitTankId: null, bounceCount: bullet.bounceCount };
   }
 
   const activeTime = Math.min(deltaSeconds, bullet.remainingLifetime);
@@ -278,7 +279,11 @@ export function advanceBullet(
       tankHit !== null &&
       (hit === null || tankHit.time < hit.time - timeTolerance)
     ) {
-      return { bullet: null, hitTankId: tankHit.tankId };
+      return {
+        bullet: null,
+        hitTankId: tankHit.tankId,
+        bounceCount: bullet.bounceCount,
+      };
     }
 
     if (hit === null) {
@@ -303,11 +308,12 @@ export function advanceBullet(
 
   const remainingLifetime = bullet.remainingLifetime - deltaSeconds;
   if (remainingLifetime <= 0) {
-    return { bullet: null, hitTankId: null };
+    return { bullet: null, hitTankId: null, bounceCount: bullet.bounceCount };
   }
 
   return {
     bullet: { ...bullet, x, y, velocityX, velocityY, remainingLifetime },
     hitTankId: null,
+    bounceCount: bullet.bounceCount,
   };
 }

@@ -37,6 +37,12 @@ describe("advanceCombat", () => {
 
     expect(next.tanks[1]!.alive).toBe(false);
     expect(next.bullets).toHaveLength(0);
+    expect(next.events).toContainEqual({
+      type: "tank-destroyed",
+      tankId: "player-2",
+      x: 15,
+      y: 0,
+    });
     expect(state.tanks[1]!.alive).toBe(true);
     expect(state.bullets).toHaveLength(1);
   });
@@ -67,6 +73,36 @@ describe("advanceCombat", () => {
 
     expect(next.tanks[0]!.alive).toBe(false);
     expect(next.bullets).toHaveLength(0);
+    expect(next.events).toContainEqual({
+      type: "bounce",
+      ownerId: "player-1",
+    });
+  });
+
+  it("reports a bounce even when the bullet is consumed later in the same step", () => {
+    const state: CombatState = {
+      tanks: [{ id: "player-2", x: 0, y: 0, radius: 3, alive: true }],
+      bullets: [makeBullet({ x: 5, velocityX: 100 })],
+    };
+    const wall: WallRect = {
+      left: 10,
+      top: -100,
+      right: 12,
+      bottom: 100,
+    };
+    const next = advanceCombat(state, 0.2, [wall], settings);
+
+    expect(next.bullets).toHaveLength(0);
+    expect(next.events).toContainEqual({
+      type: "bounce",
+      ownerId: "player-1",
+    });
+    expect(next.events).toContainEqual({
+      type: "tank-destroyed",
+      tankId: "player-2",
+      x: 0,
+      y: 0,
+    });
   });
 
   it("ignores tanks that have already been destroyed", () => {

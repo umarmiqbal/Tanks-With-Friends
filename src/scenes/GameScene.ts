@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { config } from "../config";
+import { soundEffects } from "../audio/soundEffects";
 import {
   tryCreateBullet,
   type BulletState,
@@ -39,12 +40,20 @@ interface LocalPlayer {
   marker: Phaser.GameObjects.Text;
 }
 
+interface ExplosionEffect {
+  x: number;
+  y: number;
+  color: number;
+  elapsed: number;
+}
+
 export class GameScene extends Phaser.Scene {
   private maze!: Maze;
   private wallRects!: WallRect[];
   private players: LocalPlayer[] = [];
   private playerSetups: PlayerSetup[] = [];
   private bullets: BulletState[] = [];
+  private explosions: ExplosionEffect[] = [];
   private matchState!: MatchState;
   private accumulator = 0;
   private controllerDisconnected = false;
@@ -56,6 +65,7 @@ export class GameScene extends Phaser.Scene {
   private boardTop = 0;
   private mazeGraphics!: Phaser.GameObjects.Graphics;
   private bulletGraphics!: Phaser.GameObjects.Graphics;
+  private explosionGraphics!: Phaser.GameObjects.Graphics;
   private disconnectPanel!: Phaser.GameObjects.Graphics;
   private disconnectMessage!: Phaser.GameObjects.Text;
   private statusPanel!: Phaser.GameObjects.Graphics;
@@ -63,6 +73,7 @@ export class GameScene extends Phaser.Scene {
   private title!: Phaser.GameObjects.Text;
   private subtitle!: Phaser.GameObjects.Text;
   private scoreboard!: Phaser.GameObjects.Text;
+  private audioToggle!: Phaser.GameObjects.Text;
 
   constructor() {
     super("game");
@@ -75,6 +86,7 @@ export class GameScene extends Phaser.Scene {
   create(): void {
     this.players = [];
     this.bullets = [];
+    this.explosions = [];
     this.accumulator = 0;
     this.controllerDisconnected = false;
     this.pausedForDisconnect = false;
@@ -82,6 +94,7 @@ export class GameScene extends Phaser.Scene {
     this.generateRoundMaze();
     this.mazeGraphics = this.add.graphics();
     this.bulletGraphics = this.add.graphics().setDepth(1);
+    this.explosionGraphics = this.add.graphics().setDepth(4);
     if (
       this.playerSetups.length === 0 ||
       this.playerSetups.length > config.input.maximumPlayers
@@ -154,6 +167,20 @@ export class GameScene extends Phaser.Scene {
         lineSpacing: config.presentation.scoreboardRowSpacing,
       })
       .setOrigin(0.5);
+    this.audioToggle = this.add
+      .text(0, 0, "", {
+        color: config.presentation.audioToggleColor,
+        fontFamily: config.presentation.fontFamily,
+        fontSize: `${config.presentation.audioToggleFontSize}px`,
+        fontStyle: "bold",
+      })
+      .setOrigin(1, 0)
+      .setScrollFactor(0)
+      .setDepth(5)
+      .setInteractive({ useHandCursor: true });
+    this.audioToggle.on("pointerdown", this.toggleAudio, this);
+    this.updateAudioToggle();
+    soundEffects.unlock();
     this.matchState = createMatchState(this.players.map((player) => player.id));
     this.refreshMatchPresentation();
 
@@ -168,6 +195,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   update(_time: number, deltaMilliseconds: number): void {
+    this.updateExplosions(deltaMilliseconds / 1000);
     this.accumulator += deltaMilliseconds / 1000;
     while (this.accumulator >= config.simulation.fixedTimeStep) {
       if (this.matchState.phase === "matchOver") {
@@ -219,6 +247,9 @@ export class GameScene extends Phaser.Scene {
       this.matchState = matchUpdate.state;
       if (previousMatch.phase === "playing" && this.matchState.phase !== "playing") {
         this.bullets = [];
+        if (this.matchState.winnerId !== null) {
+          soundEffects.playRoundWin();
+        }
       }
       if (matchUpdate.startNextRound) {
         this.startNextRound();
@@ -233,6 +264,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.positionPlayers();
     this.drawBullets();
+    this.drawExplosions();
   }
 
   private layout(gameSize: { width: number; height: number }): void {
@@ -266,6 +298,10 @@ export class GameScene extends Phaser.Scene {
     this.scoreboard.setPosition(
       width - boardPadding - config.presentation.scoreboardWidth / 2,
       this.boardTop + boardHeight / 2,
+    );
+    this.audioToggle.setPosition(
+      width - boardPadding,
+      boardPadding,
     );
     this.drawMaze(this.boardLeft, this.boardTop, cellSize);
     this.positionPlayers();
@@ -557,6 +593,23 @@ export class GameScene extends Phaser.Scene {
       config.bullet,
     );
     this.bullets = nextState.bullets;
+    for (const event of nextState.events) {
+      if (event.type === "bounce") {
+        soundEffects.playBounce();
+        continue;
+      }
+
+      const player = this.players.find(({ id }) => id === event.tankId);
+      if (player !== undefined) {
+        this.explosions.push({
+          x: event.x,
+          y: event.y,
+          color: config.presentation.playerColors[player.colorIndex]!,
+          elapsed: 0,
+        });
+        soundEffects.playExplosion();
+      }
+    }
     for (const tank of nextState.tanks) {
       const player = this.players.find(({ id }) => id === tank.id);
       if (player !== undefined) {
@@ -590,12 +643,24 @@ export class GameScene extends Phaser.Scene {
     if (bullet !== null) {
       this.bullets.push(bullet);
       player.fireCooldown = config.bullet.fireCooldown;
+      soundEffects.playFire();
     }
   }
 
   private drawBullets(): void {
     const graphics = this.bulletGraphics;
     graphics.clear();
+    graphics.fillStyle(
+      config.presentation.bulletGlowColor,
+      config.presentation.bulletGlowAlpha,
+    );
+    for (const bullet of this.bullets) {
+      graphics.fillCircle(
+        this.boardLeft + bullet.x * this.displayScale,
+        this.boardTop + bullet.y * this.displayScale,
+        bullet.radius * this.displayScale * config.presentation.bulletGlowScale,
+      );
+    }
     graphics.fillStyle(config.presentation.bulletColor);
     for (const bullet of this.bullets) {
       graphics.fillCircle(
@@ -604,6 +669,87 @@ export class GameScene extends Phaser.Scene {
         bullet.radius * this.displayScale,
       );
     }
+  }
+
+  private updateExplosions(deltaSeconds: number): void {
+    this.explosions = this.explosions
+      .map((explosion) => ({
+        ...explosion,
+        elapsed: explosion.elapsed + deltaSeconds,
+      }))
+      .filter(
+        (explosion) =>
+          explosion.elapsed < config.presentation.explosionLifetime,
+      );
+  }
+
+  private drawExplosions(): void {
+    const graphics = this.explosionGraphics;
+    graphics.clear();
+    for (const explosion of this.explosions) {
+      const progress = explosion.elapsed / config.presentation.explosionLifetime;
+      const alpha = 1 - progress;
+      const centerX = this.boardLeft + explosion.x * this.displayScale;
+      const centerY = this.boardTop + explosion.y * this.displayScale;
+      const waveRadius =
+        (config.presentation.explosionStartRadius +
+          (config.presentation.explosionMaxRadius -
+            config.presentation.explosionStartRadius) *
+            progress) *
+        this.displayScale;
+      graphics.lineStyle(
+        config.presentation.explosionRingThickness * this.displayScale,
+        config.presentation.explosionRingColor,
+        alpha,
+      );
+      graphics.strokeCircle(centerX, centerY, waveRadius);
+      graphics.fillStyle(config.presentation.explosionCoreColor, alpha);
+      graphics.fillCircle(
+        centerX,
+        centerY,
+        waveRadius * config.presentation.explosionCenterRadiusScale,
+      );
+
+      for (
+        let particle = 0;
+        particle < config.presentation.explosionParticleCount;
+        particle += 1
+      ) {
+        const angle =
+          (particle / config.presentation.explosionParticleCount) *
+            Math.PI *
+            2 +
+          progress * config.presentation.explosionRotationSpeed;
+        const distance =
+          progress *
+          config.presentation.explosionMaxRadius *
+          this.displayScale;
+        const radius =
+          config.presentation.explosionParticleRadius *
+          this.displayScale *
+          alpha;
+        graphics.fillStyle(explosion.color, alpha);
+        graphics.fillCircle(
+          centerX + Math.cos(angle) * distance,
+          centerY + Math.sin(angle) * distance,
+          radius,
+        );
+      }
+    }
+  }
+
+  private toggleAudio(): void {
+    const muted = soundEffects.toggleMuted();
+    if (!muted) {
+      soundEffects.unlock();
+    }
+    this.updateAudioToggle();
+  }
+
+  private updateAudioToggle(): void {
+    this.audioToggle.setText(
+      soundEffects.isMuted ? "SOUND OFF" : "SOUND ON",
+    );
   }
 
   private drawMaze(left: number, top: number, cellSize: number): void {
