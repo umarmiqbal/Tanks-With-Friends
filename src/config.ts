@@ -23,7 +23,7 @@ export const config = {
   },
   bullet: {
     speed: 500,
-    lifetime: 8,
+    lifetime: 5,
     maxPerTank: 5,
     radius: 5,
     fireCooldown: 0.25,

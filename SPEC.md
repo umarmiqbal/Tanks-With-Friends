@@ -102,3 +102,5 @@ milestone boundary for player feedback.
 - Holding the fire key repeats shots at a configurable cooldown. A bullet starts
   at the edge of its tank's collision circle, and its lifetime and ammo slot
   begin at creation.
+- Bullets default to a 5-second lifetime; the value remains configurable in
+  `src/config.ts`.
