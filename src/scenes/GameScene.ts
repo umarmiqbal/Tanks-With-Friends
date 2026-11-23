@@ -13,6 +13,8 @@ import {
   type WallRect,
 } from "../game/tankMovement";
 import type { InputSource, PlayerInput } from "../input/InputSource";
+import { CombinedInputSource } from "../input/CombinedInputSource";
+import { GamepadInput } from "../input/GamepadInput";
 import { KeyboardInput } from "../input/KeyboardInput";
 
 export class GameScene extends Phaser.Scene {
@@ -23,6 +25,8 @@ export class GameScene extends Phaser.Scene {
   private inputSource!: InputSource;
   private accumulator = 0;
   private fireCooldown = 0;
+  private controllerDisconnected = false;
+  private pausedForDisconnect = false;
   private displayScale = 1;
   private boardLeft = 0;
   private boardTop = 0;
@@ -30,6 +34,8 @@ export class GameScene extends Phaser.Scene {
   private bulletGraphics!: Phaser.GameObjects.Graphics;
   private tankGraphics!: Phaser.GameObjects.Graphics;
   private tankMarker!: Phaser.GameObjects.Text;
+  private disconnectPanel!: Phaser.GameObjects.Graphics;
+  private disconnectMessage!: Phaser.GameObjects.Text;
   private title!: Phaser.GameObjects.Text;
   private subtitle!: Phaser.GameObjects.Text;
 
@@ -53,10 +59,20 @@ export class GameScene extends Phaser.Scene {
       y: config.maze.cellSize * 0.5,
       angle: 0,
     };
-    this.inputSource = new KeyboardInput(
+    const keyboardInput = new KeyboardInput(
       window,
       config.input.keyboardSchemes[0],
     );
+    const gamepadInput = new GamepadInput(
+      config.input.defaultGamepadIndex,
+      config.input.gamepadDeadZone,
+      config.input.gamepadFireThreshold,
+      {
+        onConnectionChange: (connected) =>
+          this.handleControllerConnection(connected),
+      },
+    );
+    this.inputSource = new CombinedInputSource(gamepadInput, keyboardInput);
     this.mazeGraphics = this.add.graphics();
     this.bulletGraphics = this.add.graphics().setDepth(1);
     this.tankGraphics = this.add.graphics().setDepth(1);
@@ -69,6 +85,20 @@ export class GameScene extends Phaser.Scene {
       })
       .setOrigin(0.5)
       .setDepth(2);
+    this.disconnectPanel = this.add.graphics().setDepth(9).setScrollFactor(0);
+    this.disconnectMessage = this.add
+      .text(0, 0, "PLAYER 1 CONTROLLER DISCONNECTED\nReconnect to resume", {
+        color: config.presentation.disconnectTextColor,
+        fontFamily: config.presentation.fontFamily,
+        fontSize: `${config.presentation.disconnectFontSize}px`,
+        fontStyle: "bold",
+        align: "center",
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(10);
+    this.disconnectPanel.setVisible(false);
+    this.disconnectMessage.setVisible(false);
     this.drawTank();
     this.title = this.add
       .text(0, 0, "Tanks With Friends", {
@@ -79,11 +109,16 @@ export class GameScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
     this.subtitle = this.add
-      .text(0, 0, "W/S drive  A/D turn  Space fire", {
-        color: config.presentation.subtitleColor,
-        fontFamily: config.presentation.fontFamily,
-        fontSize: `${config.presentation.subtitleFontSize}px`,
-      })
+      .text(
+        0,
+        0,
+        "W/S drive  A/D turn  Space fire  Gamepad: stick/D-pad + A/RB/RT",
+        {
+          color: config.presentation.subtitleColor,
+          fontFamily: config.presentation.fontFamily,
+          fontSize: `${config.presentation.subtitleFontSize}px`,
+        },
+      )
       .setOrigin(0.5);
 
     this.scale.on(Phaser.Scale.Events.RESIZE, this.layout, this);
@@ -98,6 +133,10 @@ export class GameScene extends Phaser.Scene {
     this.accumulator += deltaMilliseconds / 1000;
     while (this.accumulator >= config.simulation.fixedTimeStep) {
       const input = this.inputSource.read();
+      if (this.controllerDisconnected) {
+        this.accumulator = 0;
+        break;
+      }
       this.tank = moveTank(
         this.tank,
         input,
@@ -138,6 +177,40 @@ export class GameScene extends Phaser.Scene {
     this.subtitle.setPosition(width / 2, titleTopOffset + titleHeight / 2);
     this.drawMaze(this.boardLeft, this.boardTop, cellSize);
     this.positionTank();
+    this.positionDisconnectNotice(width, height);
+  }
+
+  private handleControllerConnection(connected: boolean): void {
+    this.controllerDisconnected = !connected;
+    this.disconnectPanel.setVisible(!connected);
+    this.disconnectMessage.setVisible(!connected);
+
+    if (connected) {
+      if (this.pausedForDisconnect) {
+        this.pausedForDisconnect = false;
+        this.scene.resume();
+      }
+      return;
+    }
+
+    this.pausedForDisconnect = true;
+    this.positionDisconnectNotice(this.scale.width, this.scale.height);
+    this.scene.pause();
+  }
+
+  private positionDisconnectNotice(width: number, height: number): void {
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const padding = config.presentation.disconnectPanelPadding;
+    this.disconnectMessage.setPosition(centerX, centerY);
+    this.disconnectPanel.clear();
+    this.disconnectPanel.fillStyle(config.presentation.disconnectPanelColor);
+    this.disconnectPanel.fillRect(
+      centerX - this.disconnectMessage.width / 2 - padding,
+      centerY - this.disconnectMessage.height / 2 - padding,
+      this.disconnectMessage.width + padding * 2,
+      this.disconnectMessage.height + padding * 2,
+    );
   }
 
   private drawTank(): void {

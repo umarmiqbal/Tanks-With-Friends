@@ -35,6 +35,8 @@ export const config = {
   },
   input: {
     gamepadDeadZone: 0.18,
+    gamepadFireThreshold: 0.5,
+    defaultGamepadIndex: 0,
     keyboardDeadZone: 0.1,
     keyboardSchemes: [
       {
@@ -90,10 +92,14 @@ export const config = {
     playerColors: [0x35b8e8, 0xf25f5c, 0xf2b544, 0x70c770, 0xb07be5, 0xf08ab6],
     markerColor: "#101820",
     bulletColor: 0xffe26b,
+    disconnectTextColor: "#f5f7fa",
+    disconnectPanelColor: 0x7d2227,
     fontFamily: "Arial, sans-serif",
     titleFontSize: 32,
     subtitleFontSize: 16,
     tankMarkerFontSize: 14,
+    disconnectFontSize: 24,
+    disconnectPanelPadding: 28,
     minimumCellSize: 1,
     boardPadding: 32,
     titleTopOffset: 24,

@@ -37,7 +37,9 @@ The test suite uses Vitest. The production build is written to `dist/`.
 
 ## Current milestone
 
-M3 renders a generated maze and one keyboard-controlled tank. Use **W/S** to
-drive, **A/D** to turn, and **Space** to fire. Multiplayer, gamepad controls,
-combat, rounds, and the lobby are planned milestones and are not implemented
-yet.
+M4 renders a generated maze and one keyboard- or gamepad-controlled tank. Use
+**W/S** to drive, **A/D** to turn, and **Space** to fire. On a Standard-mapped
+gamepad, use the left stick or D-pad to move/turn and **A**, **RB**, or **RT** to
+fire. Multiplayer combat, rounds, and the lobby are planned milestones and are
+not implemented yet. Disconnecting a detected controller pauses the game until
+it reconnects.
