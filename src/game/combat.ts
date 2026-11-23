@@ -5,6 +5,7 @@ import {
   type BulletTarget,
 } from "./bullet";
 import type { WallRect } from "./tankMovement";
+import { createFragShrapnel, type ShrapnelSettings } from "./projectiles";
 import { applyTankHit, type TankPowerupState } from "./tankPowerups";
 
 export interface CombatTank extends BulletTarget {
@@ -18,10 +19,16 @@ export interface CombatState {
 
 export type CombatEvent =
   | { type: "bounce"; ownerId: string }
+  | { type: "explosion"; ownerId: string; x: number; y: number }
   | { type: "tank-destroyed"; tankId: string; x: number; y: number };
 
 export interface CombatUpdate extends CombatState {
   events: CombatEvent[];
+}
+
+export interface ProjectileCombatSettings {
+  rocketExplosionRadius: number;
+  shrapnel: ShrapnelSettings;
 }
 
 export function advanceCombat(
@@ -30,6 +37,7 @@ export function advanceCombat(
   walls: readonly WallRect[],
   settings: BulletSettings,
   invulnerabilityDuration: number,
+  projectileSettings: ProjectileCombatSettings,
 ): CombatUpdate {
   const tanks = state.tanks.map((tank) => ({ ...tank }));
   const bullets: BulletState[] = [];
@@ -44,23 +52,40 @@ export function advanceCombat(
     ) {
       events.push({ type: "bounce", ownerId: bullet.ownerId });
     }
+    if (result.detonation !== null) {
+      events.push({
+        type: "explosion",
+        ownerId: bullet.ownerId,
+        x: result.detonation.x,
+        y: result.detonation.y,
+      });
+      if (bullet.kind === "rocket") {
+        for (const tank of tanks) {
+          if (!tank.alive) {
+            continue;
+          }
+          const distance = Math.hypot(
+            tank.x - result.detonation.x,
+            tank.y - result.detonation.y,
+          );
+          if (distance <= projectileSettings.rocketExplosionRadius + tank.radius) {
+            applyDamage(tank, invulnerabilityDuration, events);
+          }
+        }
+      } else if (bullet.kind === "frag-bomb") {
+        bullets.push(
+          ...createFragShrapnel(
+            bullet.ownerId,
+            result.detonation,
+            projectileSettings.shrapnel,
+          ),
+        );
+      }
+    }
     if (result.hitTankId !== null) {
       const hitTank = tanks.find((tank) => tank.id === result.hitTankId);
       if (hitTank !== undefined) {
-        const damage = applyTankHit(
-          hitTank.powerups,
-          invulnerabilityDuration,
-        );
-        hitTank.powerups = damage.state;
-        if (damage.destroyed) {
-          hitTank.alive = false;
-          events.push({
-            type: "tank-destroyed",
-            tankId: hitTank.id,
-            x: hitTank.x,
-            y: hitTank.y,
-          });
-        }
+        applyDamage(hitTank, invulnerabilityDuration, events);
       }
     } else if (result.bullet !== null) {
       bullets.push(result.bullet);
@@ -68,4 +93,22 @@ export function advanceCombat(
   }
 
   return { tanks, bullets, events };
+}
+
+function applyDamage(
+  tank: CombatTank,
+  invulnerabilityDuration: number,
+  events: CombatEvent[],
+): void {
+  const damage = applyTankHit(tank.powerups, invulnerabilityDuration);
+  tank.powerups = damage.state;
+  if (damage.destroyed) {
+    tank.alive = false;
+    events.push({
+      type: "tank-destroyed",
+      tankId: tank.id,
+      x: tank.x,
+      y: tank.y,
+    });
+  }
 }

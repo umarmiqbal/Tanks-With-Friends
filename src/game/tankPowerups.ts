@@ -5,7 +5,8 @@ export type PassivePowerupType =
   | "shield"
   | "extra-life"
   | "speed-boost"
-  | "ghost";
+  | "ghost"
+  | "aim-guide";
 
 export type PowerupType = SpecialWeaponType | PassivePowerupType;
 
@@ -15,6 +16,7 @@ export interface TankPowerupState {
   shieldRemaining: number;
   speedBoostRemaining: number;
   ghostRemaining: number;
+  aimGuideRemaining: number;
   invulnerabilityRemaining: number;
 }
 
@@ -26,6 +28,7 @@ export interface TankPowerupSettings {
   speedBoostMoveMultiplier: number;
   speedBoostTurnMultiplier: number;
   ghostDuration: number;
+  aimGuideDuration: number;
   invulnerabilityDuration: number;
 }
 
@@ -55,6 +58,7 @@ export function createTankPowerupState(
     shieldRemaining: 0,
     speedBoostRemaining: 0,
     ghostRemaining: 0,
+    aimGuideRemaining: 0,
     invulnerabilityRemaining: 0,
   };
 }
@@ -80,6 +84,8 @@ export function applyPassivePowerup(
       return { ...state, speedBoostRemaining: settings.speedBoostDuration };
     case "ghost":
       return { ...state, ghostRemaining: settings.ghostDuration };
+    case "aim-guide":
+      return { ...state, aimGuideRemaining: settings.aimGuideDuration };
     default: {
       const unsupportedPowerup: never = powerup;
       throw new RangeError(`Unknown passive powerup: ${unsupportedPowerup}`);
@@ -107,6 +113,10 @@ export function advanceTankPowerups(
         state.speedBoostRemaining - deltaSeconds,
       ),
       ghostRemaining,
+      aimGuideRemaining: Math.max(
+        0,
+        state.aimGuideRemaining - deltaSeconds,
+      ),
       invulnerabilityRemaining: Math.max(
         0,
         state.invulnerabilityRemaining - deltaSeconds,

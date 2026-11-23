@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { config } from "../src/config";
 import {
   DoubleShotWeapon,
+  ShotgunWeapon,
   WeaponLoadout,
 } from "../src/game/weapons";
 import type { WeaponFireContext } from "../src/game/weapons";
@@ -50,6 +51,23 @@ describe("weapon loadouts", () => {
     expect(loadout.specialWeapon?.ammoRemaining).toBe(
       config.powerups.doubleShot.ammo - 1,
     );
+  });
+
+  it("fires shotgun pellets in a symmetric configurable fan", () => {
+    const shotgun = new ShotgunWeapon();
+    const result = shotgun.onFire(fireContext);
+    const angles = result.map((bullet) =>
+      Math.atan2(bullet.velocityY, bullet.velocityX),
+    );
+    const expectedFirstAngle = -config.powerups.shotgun.spreadAngle / 2;
+    const expectedLastAngle = config.powerups.shotgun.spreadAngle / 2;
+
+    expect(result).toHaveLength(config.powerups.shotgun.pelletCount);
+    expect(angles[0]).toBeCloseTo(expectedFirstAngle);
+    expect(angles.at(-1)).toBeCloseTo(expectedLastAngle);
+    for (let index = 0; index < angles.length; index += 1) {
+      expect(angles[index]).toBeCloseTo(-angles[angles.length - index - 1]!);
+    }
   });
 
   it("lets all five volleys fire under the special's bullet cap", () => {

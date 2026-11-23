@@ -1,7 +1,11 @@
 import Phaser from "phaser";
 import { config } from "../config";
 import { soundEffects } from "../audio/soundEffects";
-import type { BulletState } from "../game/bullet";
+import {
+  createBulletOrigin,
+  traceBulletPath,
+  type BulletState,
+} from "../game/bullet";
 import {
   crateCenter,
   spawnPowerupCrate,
@@ -58,6 +62,7 @@ interface LocalPlayer {
   inputSource: InputSource;
   weapons: WeaponLoadout;
   powerups: TankPowerupState;
+  aimGuideHeld: boolean;
   graphics: Phaser.GameObjects.Graphics;
   statusGraphics: Phaser.GameObjects.Graphics;
   marker: Phaser.GameObjects.Text;
@@ -102,6 +107,7 @@ export class GameScene extends Phaser.Scene {
   private boardTop = 0;
   private mazeGraphics!: Phaser.GameObjects.Graphics;
   private bulletGraphics!: Phaser.GameObjects.Graphics;
+  private aimGuideGraphics!: Phaser.GameObjects.Graphics;
   private explosionGraphics!: Phaser.GameObjects.Graphics;
   private crateGraphics!: Phaser.GameObjects.Graphics;
   private pickupGraphics!: Phaser.GameObjects.Graphics;
@@ -137,6 +143,9 @@ export class GameScene extends Phaser.Scene {
     this.generateRoundMaze();
     this.mazeGraphics = this.add.graphics();
     this.bulletGraphics = this.add.graphics().setDepth(1);
+    this.aimGuideGraphics = this.add
+      .graphics()
+      .setDepth(config.presentation.aimGuideDepth);
     this.explosionGraphics = this.add.graphics().setDepth(4);
     this.crateGraphics = this.add
       .graphics()
@@ -264,6 +273,7 @@ export class GameScene extends Phaser.Scene {
         const controls: Array<{ player: LocalPlayer; input: PlayerInput }> = [];
         for (const player of this.players) {
           if (!player.alive) {
+            player.aimGuideHeld = false;
             continue;
           }
           const powerupUpdate = advanceTankPowerups(
@@ -281,6 +291,8 @@ export class GameScene extends Phaser.Scene {
             );
           }
           const playerInput = player.inputSource.read();
+          player.aimGuideHeld =
+            playerInput.fire && player.powerups.aimGuideRemaining > 0;
           if (this.controllerDisconnected) {
             break;
           }
@@ -342,6 +354,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.positionPlayers();
     this.drawBullets();
+    this.drawAimGuides();
     this.drawCrates();
     this.drawExplosions();
     this.drawPickupEffects();
@@ -582,6 +595,7 @@ export class GameScene extends Phaser.Scene {
       player.alive = true;
       player.weapons.reset();
       player.powerups = createTankPowerupState(config.powerups.tankEffects);
+      player.aimGuideHeld = false;
     }
     this.drawMaze(
       this.boardLeft,
@@ -625,6 +639,7 @@ export class GameScene extends Phaser.Scene {
       inputSource,
       weapons: new WeaponLoadout(),
       powerups: createTankPowerupState(config.powerups.tankEffects),
+      aimGuideHeld: false,
       graphics,
       statusGraphics,
       marker,
@@ -730,12 +745,35 @@ export class GameScene extends Phaser.Scene {
       this.wallRects,
       config.bullet,
       config.powerups.tankEffects.invulnerabilityDuration,
+      {
+        rocketExplosionRadius: config.powerups.rocket.explosionRadius,
+        shrapnel: {
+          count: config.powerups.fragBomb.shrapnelCount,
+          speed: config.powerups.fragBomb.shrapnelSpeed,
+          lifetime: config.powerups.fragBomb.shrapnelLifetime,
+          radius: config.powerups.fragBomb.shrapnelRadius,
+        },
+      },
     );
     this.bullets = nextState.bullets;
     let weaponChanged = false;
     for (const event of nextState.events) {
       if (event.type === "bounce") {
         soundEffects.playBounce();
+        continue;
+      }
+      if (event.type === "explosion") {
+        const owner = this.players.find(
+          (player) => player.id === event.ownerId,
+        );
+        this.explosions.push({
+          x: event.x,
+          y: event.y,
+          color:
+            config.presentation.playerColors[owner?.colorIndex ?? 0]!,
+          elapsed: 0,
+        });
+        soundEffects.playExplosion();
         continue;
       }
       const player = this.players.find(({ id }) => id === event.tankId);
@@ -770,11 +808,11 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    const muzzleDistance = config.tank.radius - config.bullet.radius;
-    const origin = {
-      x: player.tank.x + Math.cos(player.tank.angle) * muzzleDistance,
-      y: player.tank.y + Math.sin(player.tank.angle) * muzzleDistance,
-    };
+    const origin = createBulletOrigin(
+      player.tank,
+      config.tank.radius,
+      config.bullet.radius,
+    );
     const hadSpecialWeapon = player.weapons.specialWeapon !== null;
     const result = player.weapons.fire({
       ownerId: player.id,
@@ -816,6 +854,62 @@ export class GameScene extends Phaser.Scene {
         this.boardTop + bullet.y * this.displayScale,
         bullet.radius * this.displayScale,
       );
+    }
+  }
+
+  private drawAimGuides(): void {
+    const graphics = this.aimGuideGraphics;
+    graphics.clear();
+    for (const player of this.players) {
+      if (!player.alive || !player.aimGuideHeld) {
+        continue;
+      }
+
+      const start = createBulletOrigin(
+        player.tank,
+        config.tank.radius,
+        config.bullet.radius,
+      );
+      const path = traceBulletPath(
+        {
+          ...start,
+          velocityX: Math.cos(player.tank.angle) * config.bullet.speed,
+          velocityY: Math.sin(player.tank.angle) * config.bullet.speed,
+          radius: config.bullet.radius,
+        },
+        this.wallRects,
+        config.bullet.collisionEpsilon,
+        config.powerups.aimGuide.maxBounces,
+        config.powerups.aimGuide.maxDistance,
+      );
+      graphics.fillStyle(
+        config.presentation.playerColors[player.colorIndex]!,
+        config.powerups.aimGuide.alpha,
+      );
+      for (const segment of path) {
+        const distance = Math.hypot(
+          segment.end.x - segment.start.x,
+          segment.end.y - segment.start.y,
+        );
+        if (distance === 0) {
+          continue;
+        }
+        const directionX = (segment.end.x - segment.start.x) / distance;
+        const directionY = (segment.end.y - segment.start.y) / distance;
+        for (
+          let along = 0;
+          along <= distance;
+          along += config.powerups.aimGuide.dotSpacing
+        ) {
+          graphics.fillCircle(
+            this.boardLeft +
+              (segment.start.x + directionX * along) * this.displayScale,
+            this.boardTop +
+              (segment.start.y + directionY * along) * this.displayScale,
+            config.powerups.aimGuide.dotRadius * this.displayScale,
+          );
+        }
+      }
     }
   }
 
@@ -873,14 +967,19 @@ export class GameScene extends Phaser.Scene {
       }
 
       const center = crateCenter(crate, config.maze.cellSize);
-      if (crate.powerupId === "double-shot") {
-        player.weapons.pickUp(createSpecialWeapon(crate.powerupId));
-      } else {
-        player.powerups = applyPassivePowerup(
-          player.powerups,
-          crate.powerupId,
-          config.powerups.tankEffects,
-        );
+      switch (crate.powerupId) {
+        case "double-shot":
+        case "rocket":
+        case "shotgun":
+        case "frag-bomb":
+          player.weapons.pickUp(createSpecialWeapon(crate.powerupId));
+          break;
+        default:
+          player.powerups = applyPassivePowerup(
+            player.powerups,
+            crate.powerupId,
+            config.powerups.tankEffects,
+          );
       }
       this.pickupEffects.push({ ...center, elapsed: 0 });
       this.crates.splice(crateIndex, 1);
@@ -918,23 +1017,195 @@ export class GameScene extends Phaser.Scene {
 
       const iconSize =
         size * config.presentation.powerupCrateIconScale;
-      const iconBarHeight =
-        iconSize * config.presentation.powerupCrateIconBarHeightScale;
-      const iconBarOffset =
-        iconSize * config.presentation.powerupCrateIconBarCenterOffsetScale;
-      graphics.fillStyle(config.presentation.powerupCrateIconColor, alpha);
-      graphics.fillRect(
-        x - iconSize / 2,
-        y - iconBarOffset - iconBarHeight / 2,
+      this.drawPowerupIcon(
+        graphics,
+        crate.powerupId,
+        x,
+        y,
         iconSize,
-        iconBarHeight,
+        alpha,
       );
-      graphics.fillRect(
-        x - iconSize / 2,
-        y + iconBarOffset - iconBarHeight / 2,
-        iconSize,
-        iconBarHeight,
-      );
+    }
+  }
+
+  private drawPowerupIcon(
+    graphics: Phaser.GameObjects.Graphics,
+    powerup: PowerupType,
+    x: number,
+    y: number,
+    size: number,
+    alpha: number,
+  ): void {
+    const color = config.presentation.powerupCrateIconColor;
+    const lineThickness =
+      config.presentation.powerupCrateIconLineThickness * this.displayScale;
+    graphics.fillStyle(color, alpha);
+    graphics.lineStyle(lineThickness, color, alpha);
+
+    switch (powerup) {
+      case "double-shot":
+        graphics.fillCircle(x - size * 0.2, y, size * 0.13);
+        graphics.fillCircle(x + size * 0.2, y, size * 0.13);
+        break;
+      case "rocket": {
+        const bodyWidth =
+          size * config.presentation.powerupCrateIconRocketBodyWidthScale;
+        const noseOffset =
+          size * config.presentation.powerupCrateIconRocketNoseScale;
+        const tailOffset =
+          size * config.presentation.powerupCrateIconRocketTailScale;
+        graphics.fillRect(
+          x - bodyWidth / 2,
+          y - tailOffset,
+          bodyWidth,
+          tailOffset + noseOffset * 0.35,
+        );
+        graphics.fillTriangle(
+          x - bodyWidth / 2,
+          y - noseOffset * 0.3,
+          x + bodyWidth / 2,
+          y - noseOffset * 0.3,
+          x,
+          y - noseOffset,
+        );
+        graphics.fillTriangle(
+          x - bodyWidth / 2,
+          y + tailOffset * 0.45,
+          x - bodyWidth / 2,
+          y + tailOffset,
+          x - size * 0.34,
+          y + tailOffset,
+        );
+        graphics.fillTriangle(
+          x + bodyWidth / 2,
+          y + tailOffset * 0.45,
+          x + bodyWidth / 2,
+          y + tailOffset,
+          x + size * 0.34,
+          y + tailOffset,
+        );
+        break;
+      }
+      case "shotgun": {
+        const spread = size * config.presentation.powerupCrateIconShotgunSpreadScale;
+        const pelletRadius =
+          size * config.presentation.powerupCrateIconShotgunPelletRadiusScale;
+        for (const [offsetX, offsetY] of [
+          [-spread, -spread],
+          [0, -spread * 0.45],
+          [spread, -spread],
+        ]) {
+          graphics.fillCircle(x + offsetX, y + offsetY, pelletRadius);
+        }
+        graphics.fillRect(
+          x - size * 0.1,
+          y + spread * 0.12,
+          size * 0.2,
+          spread,
+        );
+        break;
+      }
+      case "frag-bomb":
+        graphics.fillCircle(x, y + size * 0.08, size * 0.27);
+        graphics.beginPath();
+        graphics.moveTo(
+          x + size * config.presentation.powerupCrateIconFragFuseScale * 0.25,
+          y - size * config.presentation.powerupCrateIconFragFuseScale * 0.6,
+        );
+        graphics.lineTo(
+          x + size * config.presentation.powerupCrateIconFragFuseScale * 0.65,
+          y - size * config.presentation.powerupCrateIconFragFuseScale,
+        );
+        graphics.lineTo(
+          x + size * config.presentation.powerupCrateIconFragFuseScale,
+          y - size * config.presentation.powerupCrateIconFragFuseScale,
+        );
+        graphics.strokePath();
+        graphics.fillCircle(
+          x + size * config.presentation.powerupCrateIconFragFuseScale * 1.1,
+          y - size * config.presentation.powerupCrateIconFragFuseScale,
+          size * 0.05,
+        );
+        break;
+      case "shield": {
+        const halfWidth =
+          size * config.presentation.powerupCrateIconShieldWidthScale / 2;
+        const halfHeight =
+          size * config.presentation.powerupCrateIconShieldHeightScale / 2;
+        graphics.beginPath();
+        graphics.moveTo(x - halfWidth, y - halfHeight);
+        graphics.lineTo(x + halfWidth, y - halfHeight);
+        graphics.lineTo(x + halfWidth * 0.82, y + halfHeight * 0.25);
+        graphics.lineTo(x, y + halfHeight);
+        graphics.lineTo(x - halfWidth * 0.82, y + halfHeight * 0.25);
+        graphics.closePath();
+        graphics.fillPath();
+        break;
+      }
+      case "extra-life": {
+        const arm =
+          size * config.presentation.powerupCrateIconHealthArmScale;
+        const width =
+          size * config.presentation.powerupCrateIconHealthWidthScale;
+        graphics.fillRect(x - width / 2, y - arm / 2, width, arm);
+        graphics.fillRect(x - arm / 2, y - width / 2, arm, width);
+        break;
+      }
+      case "speed-boost":
+        graphics.beginPath();
+        graphics.moveTo(x + size * 0.12, y - size * 0.42);
+        graphics.lineTo(x - size * 0.22, y + size * 0.02);
+        graphics.lineTo(x - size * 0.02, y + size * 0.02);
+        graphics.lineTo(x - size * 0.15, y + size * 0.42);
+        graphics.lineTo(x + size * 0.25, y - size * 0.08);
+        graphics.lineTo(x + size * 0.04, y - size * 0.08);
+        graphics.closePath();
+        graphics.fillPath();
+        break;
+      case "ghost":
+        graphics.fillCircle(x, y - size * 0.08, size * 0.28);
+        graphics.fillRect(x - size * 0.28, y - size * 0.08, size * 0.56, size * 0.3);
+        for (const eyeOffset of [-0.1, 0.1]) {
+          graphics.fillStyle(config.presentation.powerupCrateFillColor, alpha);
+          graphics.fillCircle(
+            x + size * eyeOffset,
+            y - size * 0.05,
+            size * 0.04,
+          );
+          graphics.fillStyle(color, alpha);
+        }
+        break;
+      case "aim-guide": {
+        const spacing =
+          size * config.presentation.powerupCrateIconAimDotSpacingScale;
+        const radius =
+          size * config.presentation.powerupCrateIconShotgunPelletRadiusScale;
+        for (
+          let dot = 0;
+          dot < config.presentation.powerupCrateIconAimDotCount;
+          dot += 1
+        ) {
+          graphics.fillCircle(
+            x + dot * spacing - spacing,
+            y,
+            radius *
+              (1 - dot * config.presentation.powerupCrateIconAimDotFalloffScale),
+          );
+        }
+        graphics.fillTriangle(
+          x + spacing * 1.15,
+          y - radius,
+          x + spacing * 1.15,
+          y + radius,
+          x + spacing * 1.6,
+          y,
+        );
+        break;
+      }
+      default: {
+        const unsupportedPowerup: never = powerup;
+        throw new RangeError(`Unknown crate icon: ${unsupportedPowerup}`);
+      }
     }
   }
 
@@ -980,6 +1251,7 @@ export class GameScene extends Phaser.Scene {
     for (const player of this.players) {
       player.weapons.reset();
       player.powerups = createTankPowerupState(config.powerups.tankEffects);
+      player.aimGuideHeld = false;
     }
   }
 

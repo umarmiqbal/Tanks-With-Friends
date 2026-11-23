@@ -37,7 +37,7 @@ The test suite uses Vitest. The production build is written to `dist/`.
 
 ## Current milestone
 
-M10 builds on the M7 lobby: press **Space**, **Enter**, or another keyboard
+M11 builds on the M7 lobby: press **Space**, **Enter**, or another keyboard
 scheme's fire key to join, or press any button on a Standard-mapped controller.
 A joined player presses that same fire input again to start; all joined
 controllers must be connected. Up to six players can join. If a controller
@@ -66,6 +66,17 @@ Passive crates also provide:
 - **Ghost** — temporarily lets the tank pass through walls. If it expires
   inside a wall, the tank is moved to the nearest open cell center; bullets
   still hit it.
+- **Rocket** — a fast shot that explodes on wall or tank contact, damaging
+  nearby tanks, including its shooter.
+- **Shotgun** — a fan of short-lived bullets that bounce off walls.
+- **Frag Bomb** — a slow bomb that detonates on a fuse or tank contact and
+  releases bouncing shrapnel.
+- **Aim Guide** — while this timed pickup is active, hold fire to show a subtle
+  dotted preview of the bouncing cannon path.
+
+Every crate now has a distinct procedural icon indicating its pickup: paired
+shots, rocket, pellet fan, bomb, shield, health cross, speed bolt, ghost, or
+aim path.
 
 Tank explosions, crate pickups, glowing bullets, and crate spawn-ins are drawn
 procedurally. Fire, bounce, explosion, pickup, and round-win sounds are

@@ -1,6 +1,7 @@
 import type { WallRect } from "./tankMovement";
 
 export interface BulletState {
+  kind?: "bullet" | "rocket" | "frag-bomb" | "shrapnel";
   ownerId: string;
   x: number;
   y: number;
@@ -9,6 +10,7 @@ export interface BulletState {
   radius: number;
   remainingLifetime: number;
   bounceCount: number;
+  fuseRemaining?: number;
 }
 
 export interface BulletTarget {
@@ -23,6 +25,25 @@ export interface BulletAdvanceResult {
   bullet: BulletState | null;
   hitTankId: string | null;
   bounceCount: number;
+  detonation: { x: number; y: number } | null;
+  path: BulletPathSegment[];
+}
+
+export interface BulletPathSegment {
+  start: { x: number; y: number };
+  end: { x: number; y: number };
+}
+
+export function createBulletOrigin(
+  tank: { x: number; y: number; angle: number },
+  tankRadius: number,
+  bulletRadius: number,
+): { x: number; y: number } {
+  const muzzleDistance = tankRadius - bulletRadius;
+  return {
+    x: tank.x + Math.cos(tank.angle) * muzzleDistance,
+    y: tank.y + Math.sin(tank.angle) * muzzleDistance,
+  };
 }
 
 export interface BulletSettings {
@@ -170,7 +191,7 @@ function findFirstTankHit(
 }
 
 function findFirstHit(
-  bullet: BulletState,
+  bullet: Pick<BulletState, "x" | "y" | "radius">,
   deltaX: number,
   deltaY: number,
   walls: readonly WallRect[],
@@ -242,15 +263,35 @@ export function advanceBullet(
   targets: readonly BulletTarget[] = [],
 ): BulletAdvanceResult {
   if (bullet.remainingLifetime <= 0) {
-    return { bullet: null, hitTankId: null, bounceCount: bullet.bounceCount };
+    return {
+      bullet: null,
+      hitTankId: null,
+      bounceCount: bullet.bounceCount,
+      detonation: null,
+      path: [],
+    };
   }
 
-  const activeTime = Math.min(deltaSeconds, bullet.remainingLifetime);
+  const fuseDetonates =
+    bullet.kind === "frag-bomb" &&
+    bullet.fuseRemaining !== undefined &&
+    bullet.fuseRemaining <=
+      deltaSeconds +
+        Number.EPSILON * Math.max(1, deltaSeconds, bullet.fuseRemaining) &&
+    bullet.fuseRemaining <= bullet.remainingLifetime;
+  const activeTime = Math.min(
+    deltaSeconds,
+    bullet.remainingLifetime,
+    bullet.kind === "frag-bomb" && bullet.fuseRemaining !== undefined
+      ? bullet.fuseRemaining
+      : Number.POSITIVE_INFINITY,
+  );
   let remainingTime = activeTime;
   let x = bullet.x;
   let y = bullet.y;
   let velocityX = bullet.velocityX;
   let velocityY = bullet.velocityY;
+  const path: BulletPathSegment[] = [];
 
   while (remainingTime > 0) {
     const deltaX = velocityX * remainingTime;
@@ -279,21 +320,66 @@ export function advanceBullet(
       tankHit !== null &&
       (hit === null || tankHit.time < hit.time - timeTolerance)
     ) {
+      if (bullet.kind === "rocket" || bullet.kind === "frag-bomb") {
+        return {
+          bullet: null,
+          hitTankId: bullet.kind === "frag-bomb" ? tankHit.tankId : null,
+          bounceCount: bullet.bounceCount,
+          detonation: {
+            x: x + deltaX * tankHit.time,
+            y: y + deltaY * tankHit.time,
+          },
+          path: [
+            {
+              start: { x, y },
+              end: {
+                x: x + deltaX * tankHit.time,
+                y: y + deltaY * tankHit.time,
+              },
+            },
+          ],
+        };
+      }
       return {
         bullet: null,
         hitTankId: tankHit.tankId,
         bounceCount: bullet.bounceCount,
+        detonation: null,
+        path: [
+          {
+            start: { x, y },
+            end: {
+              x: x + deltaX * tankHit.time,
+              y: y + deltaY * tankHit.time,
+            },
+          },
+        ],
       };
     }
 
     if (hit === null) {
+      path.push({
+        start: { x, y },
+        end: { x: x + deltaX, y: y + deltaY },
+      });
       x += deltaX;
       y += deltaY;
       break;
     }
 
+    const start = { x, y };
     x += deltaX * hit.time;
     y += deltaY * hit.time;
+    path.push({ start, end: { x, y } });
+    if (bullet.kind === "rocket") {
+      return {
+        bullet: null,
+        hitTankId: null,
+        bounceCount: bullet.bounceCount,
+        detonation: { x, y },
+        path,
+      };
+    }
     if (hit.normalX !== 0) {
       velocityX = -velocityX;
       x += hit.normalX * settings.collisionEpsilon;
@@ -307,13 +393,109 @@ export function advanceBullet(
   }
 
   const remainingLifetime = bullet.remainingLifetime - deltaSeconds;
+  if (fuseDetonates) {
+    return {
+      bullet: null,
+      hitTankId: null,
+      bounceCount: bullet.bounceCount,
+      detonation: { x, y },
+      path,
+    };
+  }
   if (remainingLifetime <= 0) {
-    return { bullet: null, hitTankId: null, bounceCount: bullet.bounceCount };
+    return {
+      bullet: null,
+      hitTankId: null,
+      bounceCount: bullet.bounceCount,
+      detonation: null,
+      path,
+    };
   }
 
   return {
-    bullet: { ...bullet, x, y, velocityX, velocityY, remainingLifetime },
+    bullet: {
+      ...bullet,
+      x,
+      y,
+      velocityX,
+      velocityY,
+      remainingLifetime,
+      ...(bullet.kind === "frag-bomb" && bullet.fuseRemaining !== undefined
+        ? { fuseRemaining: Math.max(0, bullet.fuseRemaining - deltaSeconds) }
+        : {}),
+    },
     hitTankId: null,
     bounceCount: bullet.bounceCount,
+    detonation: null,
+    path,
   };
+}
+
+export function traceBulletPath(
+  bullet: Pick<BulletState, "x" | "y" | "velocityX" | "velocityY" | "radius">,
+  walls: readonly WallRect[],
+  collisionEpsilon: number,
+  maxBounces: number,
+  maxDistance: number,
+): BulletPathSegment[] {
+  if (
+    !Number.isInteger(maxBounces) ||
+    maxBounces < 0 ||
+    !Number.isFinite(maxDistance) ||
+    maxDistance < 0 ||
+    !Number.isFinite(collisionEpsilon) ||
+    collisionEpsilon <= 0
+  ) {
+    throw new RangeError("Bullet path settings must be non-negative and finite.");
+  }
+
+  const speed = Math.hypot(bullet.velocityX, bullet.velocityY);
+  if (speed === 0 || maxDistance === 0) {
+    return [];
+  }
+
+  let unitX = bullet.velocityX / speed;
+  let unitY = bullet.velocityY / speed;
+  let x = bullet.x;
+  let y = bullet.y;
+  let distanceRemaining = maxDistance;
+  let bounces = 0;
+  const path: BulletPathSegment[] = [];
+
+  while (distanceRemaining > 0) {
+    const deltaX = unitX * distanceRemaining;
+    const deltaY = unitY * distanceRemaining;
+    const hit = findFirstHit(
+      { x, y, radius: bullet.radius },
+      deltaX,
+      deltaY,
+      walls,
+      collisionEpsilon,
+    );
+    if (hit === null) {
+      path.push({
+        start: { x, y },
+        end: { x: x + deltaX, y: y + deltaY },
+      });
+      break;
+    }
+
+    const end = { x: x + deltaX * hit.time, y: y + deltaY * hit.time };
+    path.push({ start: { x, y }, end });
+    if (bounces >= maxBounces) {
+      break;
+    }
+    distanceRemaining *= 1 - hit.time;
+    x = end.x + hit.normalX * collisionEpsilon;
+    y = end.y + hit.normalY * collisionEpsilon;
+    if (hit.normalX !== 0) {
+      unitX *= -1;
+    }
+    if (hit.normalY !== 0) {
+      unitY *= -1;
+    }
+    bounces += 1;
+  }
+
+  return path;
 }

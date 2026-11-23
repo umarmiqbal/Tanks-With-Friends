@@ -88,11 +88,21 @@ runtime.
   The scoreboard shows its `[2X]` icon and remaining ammo.
 - M10 passive crates provide **Shield**, **Extra Life**, **Speed Boost**, and
   **Ghost**. They apply immediately and do not replace the held special.
+- Each powerup crate displays a distinct procedural icon: parallel shots,
+  rocket, fan pellets, bomb/fuse, shield, health cross, speed bolt, ghost, or
+  dotted aim path.
 - **Shield** absorbs one hit before breaking or expiring. **Extra Life** adds
   one hit point for the current round, up to a configurable maximum; a hit
   grants brief invulnerability. **Speed Boost** temporarily increases movement
   and turn speed. **Ghost** temporarily disables tank-wall collision, but
   bullets still hit the tank.
+- M11 special weapons are **Rocket**, **Shotgun**, and **Frag Bomb**. Rockets
+  travel straight and detonate on first wall or tank contact; the blast damages
+  nearby tanks, including the shooter. Shotgun fires a short-lived bouncing
+  fan. Frag Bombs detonate on fuse expiry or tank contact and release short-lived
+  bouncing shrapnel.
+- **Aim Guide** is a timed passive pickup. While its holder holds fire, show a
+  subtle player-colored dotted preview with swept wall bounces.
 
 ## Milestones
 
@@ -112,6 +122,8 @@ runtime.
    weighted crate spawning, pickup feedback, and weapon HUD.
 10. **M10 — Defensive and utility powerups:** shield, extra life, speed boost,
     and ghost, with damage and expiry tests.
+11. **M11 — Projectile weapons and aim guide:** rocket, shotgun, frag bomb, and
+    a bounced-path preview sharing the live projectile collision logic.
 
 Each milestone is validated with `npx tsc --noEmit`, `npm test`, and
 `npm run build`, then committed before playtesting. Work stops at each
@@ -161,6 +173,13 @@ milestone boundary for player feedback.
 - M10 powerups use equal crate weights. Recollecting Shield, Speed Boost, or
   Ghost refreshes its effect instead of stacking it; an Extra Life crate at
   maximum hit points is consumed without adding health.
+- M11 adds all projectile weapons and Aim Guide to the crate table at equal
+  weights. Rocket blasts use radial distance and are not blocked by walls.
+- Frag Bombs bounce normally until their fuse expires or they contact a tank;
+  tank contact damages that tank and also releases shrapnel.
+- Aim Guide is a timed passive pickup, does not replace a weapon, and appears
+  only while the holder is pressing the normal fire input. It predicts a
+  standard bouncing bullet path, even while another special weapon is held.
 - A Ghost tank that expires while overlapping a wall is moved to the nearest
   maze-cell center that can fit the tank. This uses a deterministic
   row-then-column tie break.

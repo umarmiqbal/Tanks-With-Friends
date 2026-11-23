@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { advanceBullet, tryCreateBullet } from "../src/game/bullet";
+import {
+  advanceBullet,
+  traceBulletPath,
+  tryCreateBullet,
+} from "../src/game/bullet";
 import type { BulletSettings, BulletState } from "../src/game/bullet";
 import type { WallRect } from "../src/game/tankMovement";
 
@@ -87,6 +91,60 @@ describe("advanceBullet", () => {
     expect(advanced).not.toBeNull();
     expect(advanced!.velocityX).toBe(-1000);
     expect(advanced!.x).toBeLessThan(9);
+  });
+
+  it("traces the same bounced path as an actual bullet over the same distance", () => {
+    const start = bullet();
+    const maxDistance = 50;
+    const preview = traceBulletPath(
+      start,
+      [verticalWall],
+      settings.collisionEpsilon,
+      4,
+      maxDistance,
+    );
+    const actual = advanceBullet(
+      start,
+      maxDistance / settings.speed,
+      [verticalWall],
+      settings,
+    );
+
+    expect(preview).toHaveLength(actual.path.length);
+    for (const [index, segment] of preview.entries()) {
+      expect(segment.start.x).toBeCloseTo(actual.path[index]!.start.x);
+      expect(segment.start.y).toBeCloseTo(actual.path[index]!.start.y);
+      expect(segment.end.x).toBeCloseTo(actual.path[index]!.end.x);
+      expect(segment.end.y).toBeCloseTo(actual.path[index]!.end.y);
+    }
+  });
+
+  it("detonates a rocket at its first wall contact without reflecting", () => {
+    const result = advanceBullet(
+      bullet({ kind: "rocket" }),
+      0.2,
+      [verticalWall],
+      settings,
+    );
+
+    expect(result.bullet).toBeNull();
+    expect(result.bounceCount).toBe(0);
+    expect(result.detonation?.x).toBeCloseTo(9);
+    expect(result.path).toHaveLength(1);
+  });
+
+  it("counts down a frag bomb fuse across fixed updates", () => {
+    const frag = bullet({
+      kind: "frag-bomb",
+      fuseRemaining: 0.05,
+    });
+    const first = advanceBullet(frag, 0.02, [], settings);
+    expect(first.detonation).toBeNull();
+    expect(first.bullet?.fuseRemaining).toBeCloseTo(0.03);
+
+    const second = advanceBullet(first.bullet!, 0.03, [], settings);
+    expect(second.bullet).toBeNull();
+    expect(second.detonation?.x).toBeCloseTo(5);
   });
 
   it("expires after its lifetime, even when the update exceeds the remaining time", () => {
