@@ -22,7 +22,10 @@ const settings = {
   crateRadius: 16,
 };
 
-const weights = [{ value: "double-shot", weight: 1 }] as const;
+const weights = [
+  { value: "double-shot", weight: 1 },
+  { value: "shield", weight: 1 },
+] as const;
 
 describe("powerup crates", () => {
   it("spawns only in valid, unoccupied cells away from living tanks", () => {
@@ -38,7 +41,7 @@ describe("powerup crates", () => {
     expect(crate).toEqual({
       column: 0,
       row: 1,
-      weaponId: "double-shot",
+      powerupId: "double-shot",
     });
     expect(crate!.column).toBeGreaterThanOrEqual(0);
     expect(crate!.column).toBeLessThan(maze.columns);

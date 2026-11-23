@@ -138,6 +138,57 @@ function resolveCircleAgainstWalls(
   return { x, y };
 }
 
+export function isTankOverlappingWalls(
+  tank: TankState,
+  radius: number,
+  walls: readonly WallRect[],
+): boolean {
+  return walls.some((wall) => {
+    const nearestX = clamp(tank.x, wall.left, wall.right);
+    const nearestY = clamp(tank.y, wall.top, wall.bottom);
+    return (tank.x - nearestX) ** 2 + (tank.y - nearestY) ** 2 < radius ** 2;
+  });
+}
+
+export function pushTankToNearestOpenSpace(
+  tank: TankState,
+  maze: Maze,
+  cellSize: number,
+  radius: number,
+  walls: readonly WallRect[],
+): TankState {
+  if (!isTankOverlappingWalls(tank, radius, walls)) {
+    return tank;
+  }
+
+  let nearestPosition: TankState | null = null;
+  let nearestDistanceSquared = Number.POSITIVE_INFINITY;
+  for (let row = 0; row < maze.rows; row += 1) {
+    for (let column = 0; column < maze.columns; column += 1) {
+      const position = {
+        x: (column + 0.5) * cellSize,
+        y: (row + 0.5) * cellSize,
+        angle: tank.angle,
+      };
+      if (isTankOverlappingWalls(position, radius, walls)) {
+        continue;
+      }
+
+      const distanceSquared =
+        (position.x - tank.x) ** 2 + (position.y - tank.y) ** 2;
+      if (distanceSquared < nearestDistanceSquared) {
+        nearestPosition = position;
+        nearestDistanceSquared = distanceSquared;
+      }
+    }
+  }
+
+  if (nearestPosition === null) {
+    throw new RangeError("Maze has no open space for a tank.");
+  }
+  return nearestPosition;
+}
+
 export function moveTank(
   tank: TankState,
   input: PlayerInput,

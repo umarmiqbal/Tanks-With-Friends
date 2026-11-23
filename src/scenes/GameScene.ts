@@ -23,13 +23,21 @@ import {
 import {
   createMazeWallRects,
   moveTank,
+  pushTankToNearestOpenSpace,
   type TankState,
   type WallRect,
 } from "../game/tankMovement";
 import {
+  advanceTankPowerups,
+  applyPassivePowerup,
+  createTankPowerupState,
+  getTankMovementEffects,
+  type PowerupType,
+  type TankPowerupState,
+} from "../game/tankPowerups";
+import {
   createSpecialWeapon,
   WeaponLoadout,
-  type SpecialWeaponType,
 } from "../game/weapons";
 import type { PlayerSetup } from "../game/playerSetup";
 import type { InputSource, PlayerInput } from "../input/InputSource";
@@ -49,7 +57,9 @@ interface LocalPlayer {
   alive: boolean;
   inputSource: InputSource;
   weapons: WeaponLoadout;
+  powerups: TankPowerupState;
   graphics: Phaser.GameObjects.Graphics;
+  statusGraphics: Phaser.GameObjects.Graphics;
   marker: Phaser.GameObjects.Text;
 }
 
@@ -60,7 +70,7 @@ interface ExplosionEffect {
   elapsed: number;
 }
 
-interface ActiveCrate extends PowerupCrate<SpecialWeaponType> {
+interface ActiveCrate extends PowerupCrate<PowerupType> {
   elapsed: number;
 }
 
@@ -256,16 +266,35 @@ export class GameScene extends Phaser.Scene {
           if (!player.alive) {
             continue;
           }
+          const powerupUpdate = advanceTankPowerups(
+            player.powerups,
+            config.simulation.fixedTimeStep,
+          );
+          player.powerups = powerupUpdate.state;
+          if (powerupUpdate.ghostExpired) {
+            player.tank = pushTankToNearestOpenSpace(
+              player.tank,
+              this.maze,
+              config.maze.cellSize,
+              config.tank.radius,
+              this.wallRects,
+            );
+          }
           const playerInput = player.inputSource.read();
           if (this.controllerDisconnected) {
             break;
           }
+          const movementEffects = getTankMovementEffects(
+            config.tank,
+            player.powerups,
+            config.powerups.tankEffects,
+          );
           player.tank = moveTank(
             player.tank,
             playerInput,
             config.simulation.fixedTimeStep,
-            this.wallRects,
-            config.tank,
+            movementEffects.ignoresWalls ? [] : this.wallRects,
+            movementEffects.movementSettings,
           );
           controls.push({ player, input: playerInput });
         }
@@ -552,6 +581,7 @@ export class GameScene extends Phaser.Scene {
       };
       player.alive = true;
       player.weapons.reset();
+      player.powerups = createTankPowerupState(config.powerups.tankEffects);
     }
     this.drawMaze(
       this.boardLeft,
@@ -567,6 +597,7 @@ export class GameScene extends Phaser.Scene {
     inputSource: InputSource,
   ): LocalPlayer {
     const graphics = this.add.graphics().setDepth(2);
+    const statusGraphics = this.add.graphics().setDepth(4);
     const marker = this.add
       .text(0, 0, `${setup.colorIndex + 1}`, {
         color: config.presentation.markerColor,
@@ -593,7 +624,9 @@ export class GameScene extends Phaser.Scene {
       alive: true,
       inputSource,
       weapons: new WeaponLoadout(),
+      powerups: createTankPowerupState(config.powerups.tankEffects),
       graphics,
+      statusGraphics,
       marker,
     };
   }
@@ -601,6 +634,7 @@ export class GameScene extends Phaser.Scene {
   private positionPlayers(): void {
     for (const player of this.players) {
       player.graphics.setVisible(player.alive);
+      player.statusGraphics.setVisible(player.alive);
       player.marker.setVisible(player.alive);
       if (!player.alive) {
         continue;
@@ -612,7 +646,46 @@ export class GameScene extends Phaser.Scene {
         .setPosition(x, y)
         .setRotation(player.tank.angle)
         .setScale(this.displayScale);
+      player.statusGraphics
+        .setPosition(x, y)
+        .setScale(this.displayScale);
+      this.drawTankStatus(player);
       player.marker.setPosition(x, y).setScale(this.displayScale);
+    }
+  }
+
+  private drawTankStatus(player: LocalPlayer): void {
+    const graphics = player.statusGraphics;
+    graphics.clear();
+    if (
+      player.powerups.shieldCharges > 0 &&
+      player.powerups.shieldRemaining > 0
+    ) {
+      const shieldRadius =
+        config.tank.radius + config.presentation.shieldBubblePadding;
+      graphics.fillStyle(
+        config.presentation.shieldBubbleColor,
+        config.presentation.shieldBubbleAlpha,
+      );
+      graphics.fillCircle(0, 0, shieldRadius);
+      graphics.lineStyle(
+        config.presentation.shieldBubbleLineThickness,
+        config.presentation.shieldBubbleColor,
+        config.presentation.shieldBubbleLineAlpha,
+      );
+      graphics.strokeCircle(0, 0, shieldRadius);
+    }
+
+    graphics.fillStyle(config.presentation.playerColors[player.colorIndex]!);
+    const healthPipWidth =
+      (player.powerups.hitPoints - 1) * config.presentation.healthPipSpacing;
+    const firstHealthPipX = -healthPipWidth / 2;
+    for (let pip = 0; pip < player.powerups.hitPoints; pip += 1) {
+      graphics.fillCircle(
+        firstHealthPipX + pip * config.presentation.healthPipSpacing,
+        config.presentation.healthPipOffset,
+        config.presentation.healthPipRadius,
+      );
     }
   }
 
@@ -647,6 +720,7 @@ export class GameScene extends Phaser.Scene {
         y: player.tank.y,
         radius: config.tank.radius,
         alive: player.alive,
+        powerups: player.powerups,
       })),
       bullets: this.bullets,
     };
@@ -655,6 +729,7 @@ export class GameScene extends Phaser.Scene {
       deltaSeconds,
       this.wallRects,
       config.bullet,
+      config.powerups.tankEffects.invulnerabilityDuration,
     );
     this.bullets = nextState.bullets;
     let weaponChanged = false;
@@ -663,7 +738,6 @@ export class GameScene extends Phaser.Scene {
         soundEffects.playBounce();
         continue;
       }
-
       const player = this.players.find(({ id }) => id === event.tankId);
       if (player !== undefined) {
         weaponChanged = player.weapons.clearSpecial() || weaponChanged;
@@ -683,6 +757,7 @@ export class GameScene extends Phaser.Scene {
       const player = this.players.find(({ id }) => id === tank.id);
       if (player !== undefined) {
         player.alive = tank.alive;
+        player.powerups = tank.powerups;
       }
     }
   }
@@ -798,7 +873,15 @@ export class GameScene extends Phaser.Scene {
       }
 
       const center = crateCenter(crate, config.maze.cellSize);
-      player.weapons.pickUp(createSpecialWeapon(crate.weaponId));
+      if (crate.powerupId === "double-shot") {
+        player.weapons.pickUp(createSpecialWeapon(crate.powerupId));
+      } else {
+        player.powerups = applyPassivePowerup(
+          player.powerups,
+          crate.powerupId,
+          config.powerups.tankEffects,
+        );
+      }
       this.pickupEffects.push({ ...center, elapsed: 0 });
       this.crates.splice(crateIndex, 1);
       soundEffects.playPickup();
@@ -896,6 +979,7 @@ export class GameScene extends Phaser.Scene {
     this.crateSpawnRemaining = config.powerups.crateSpawnInterval;
     for (const player of this.players) {
       player.weapons.reset();
+      player.powerups = createTankPowerupState(config.powerups.tankEffects);
     }
   }
 

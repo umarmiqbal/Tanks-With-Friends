@@ -8,7 +8,7 @@ export interface CrateCell {
 }
 
 export interface PowerupCrate<T extends string = string> extends CrateCell {
-  weaponId: T;
+  powerupId: T;
 }
 
 export interface CrateTank {
@@ -89,7 +89,7 @@ export function spawnPowerupCrate<T extends string>(
   const cell = validCells[randomIndex(validCells.length, random)]!;
   return {
     ...cell,
-    weaponId: selectWeighted(weights, random),
+    powerupId: selectWeighted(weights, random),
   };
 }
 

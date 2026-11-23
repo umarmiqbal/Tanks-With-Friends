@@ -5,9 +5,14 @@ import {
   type BulletTarget,
 } from "./bullet";
 import type { WallRect } from "./tankMovement";
+import { applyTankHit, type TankPowerupState } from "./tankPowerups";
+
+export interface CombatTank extends BulletTarget {
+  powerups: TankPowerupState;
+}
 
 export interface CombatState {
-  tanks: BulletTarget[];
+  tanks: CombatTank[];
   bullets: BulletState[];
 }
 
@@ -24,6 +29,7 @@ export function advanceCombat(
   deltaSeconds: number,
   walls: readonly WallRect[],
   settings: BulletSettings,
+  invulnerabilityDuration: number,
 ): CombatUpdate {
   const tanks = state.tanks.map((tank) => ({ ...tank }));
   const bullets: BulletState[] = [];
@@ -41,13 +47,20 @@ export function advanceCombat(
     if (result.hitTankId !== null) {
       const hitTank = tanks.find((tank) => tank.id === result.hitTankId);
       if (hitTank !== undefined) {
-        hitTank.alive = false;
-        events.push({
-          type: "tank-destroyed",
-          tankId: hitTank.id,
-          x: hitTank.x,
-          y: hitTank.y,
-        });
+        const damage = applyTankHit(
+          hitTank.powerups,
+          invulnerabilityDuration,
+        );
+        hitTank.powerups = damage.state;
+        if (damage.destroyed) {
+          hitTank.alive = false;
+          events.push({
+            type: "tank-destroyed",
+            tankId: hitTank.id,
+            x: hitTank.x,
+            y: hitTank.y,
+          });
+        }
       }
     } else if (result.bullet !== null) {
       bullets.push(result.bullet);

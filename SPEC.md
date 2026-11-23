@@ -21,8 +21,9 @@ runtime.
   collision detection, so fast bullets do not tunnel through walls. Reflect
   velocity about the wall normal; handle corner contacts sensibly.
 - Bullets expire after a configurable lifetime. Each tank has a configurable
-  maximum number of live bullets. A hit consumes the bullet and destroys the
-  tank, including when a tank is hit by its own bounced shot.
+  maximum number of live bullets. A hit consumes the bullet and damages the
+  tank, including when a tank is hit by its own bounced shot. Tanks start with
+  one hit point.
 - Approximate tank-wall collision with circles and let tanks slide along walls.
 - End a round when at most one tank remains. Award the survivor one point,
   display a brief round-over banner, then create a new maze and respawn all
@@ -69,7 +70,8 @@ runtime.
 - Draw tank bodies, turrets, bullets, thick maze walls, and explosions
   procedurally with Phaser Graphics.
 - Keep visuals high-contrast and readable on a television. Tank color and
-  player number both distinguish players.
+  player number both distinguish players. Show shield bubbles and health pips
+  procedurally when applicable.
 - Generate fire, bounce, explosion, and round-win sounds with the Web Audio API
   behind one muteable audio module. Powerup pickups also have a distinct sound.
 
@@ -84,7 +86,13 @@ runtime.
 - The M9 placeholder special is **Double Shot**: each trigger fires two parallel
   bullets, consumes one ammo charge, and is limited by both ammo and a timer.
   The scoreboard shows its `[2X]` icon and remaining ammo.
-- M10 and later powerups are out of scope for M9.
+- M10 passive crates provide **Shield**, **Extra Life**, **Speed Boost**, and
+  **Ghost**. They apply immediately and do not replace the held special.
+- **Shield** absorbs one hit before breaking or expiring. **Extra Life** adds
+  one hit point for the current round, up to a configurable maximum; a hit
+  grants brief invulnerability. **Speed Boost** temporarily increases movement
+  and turn speed. **Ghost** temporarily disables tank-wall collision, but
+  bullets still hit the tank.
 
 ## Milestones
 
@@ -102,6 +110,8 @@ runtime.
 8. **M8 — Polish:** procedural effects, explosion visuals, and audio.
 9. **M9 — Weapon framework and crates:** default cannon interface, Double Shot,
    weighted crate spawning, pickup feedback, and weapon HUD.
+10. **M10 — Defensive and utility powerups:** shield, extra life, speed boost,
+    and ghost, with damage and expiry tests.
 
 Each milestone is validated with `npx tsc --noEmit`, `npm test`, and
 `npm run build`, then committed before playtesting. Work stops at each
@@ -148,6 +158,14 @@ milestone boundary for player feedback.
 - To allow all five Double Shot charges to be used without waiting for older
   shots to expire, Double Shot may have up to 10 live bullets; the default
   cannon retains the standard five-bullet cap.
+- M10 powerups use equal crate weights. Recollecting Shield, Speed Boost, or
+  Ghost refreshes its effect instead of stacking it; an Extra Life crate at
+  maximum hit points is consumed without adding health.
+- A Ghost tank that expires while overlapping a wall is moved to the nearest
+  maze-cell center that can fit the tank. This uses a deterministic
+  row-then-column tie break.
+- Shield absorption also starts the brief invulnerability window, preventing
+  another bullet in the same moment from immediately damaging health.
 - If all tanks are destroyed in the same round, it is a draw and no player
   receives a point.
 - The M6 scoreboard is a vertical list in a reserved right-side column so it

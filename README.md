@@ -37,7 +37,7 @@ The test suite uses Vitest. The production build is written to `dist/`.
 
 ## Current milestone
 
-M9 builds on the M7 lobby: press **Space**, **Enter**, or another keyboard
+M10 builds on the M7 lobby: press **Space**, **Enter**, or another keyboard
 scheme's fire key to join, or press any button on a Standard-mapped controller.
 A joined player presses that same fire input again to start; all joined
 controllers must be connected. Up to six players can join. If a controller
@@ -48,13 +48,24 @@ The scoreboard is stacked vertically on the right, and the first player to
 five points wins. Keyboard schemes and controller mappings are shown in the
 lobby. Controllers use the left stick for movement and steering, optional
 right-stick horizontal steering, and D-pad overrides; **A**, **RB**, or **RT**
-fires. One hit destroys a tank, including its own bounced bullets.
+fires. Tanks start with one hit point; bounced bullets can damage their owner.
 Crates begin spawning after eight seconds, with at most three active; they do
 not spawn on a living tank or another crate. Drive over one to pick it up.
 **Double Shot** replaces your current special, fires two parallel bullets per
 trigger, and has five volleys or twelve seconds before reverting to the cannon.
 The scoreboard shows `[2X]` and remaining volleys. Specials are cleared on
 death or round end, and are not dropped.
+
+Passive crates also provide:
+
+- **Shield** — absorbs one hit or expires after its timer; a bubble shows while
+  it is active.
+- **Extra Life** — adds one hit point for the round, up to three; health pips
+  appear near the tank. Hits briefly grant invulnerability.
+- **Speed Boost** — temporarily increases movement and turn speed.
+- **Ghost** — temporarily lets the tank pass through walls. If it expires
+  inside a wall, the tank is moved to the nearest open cell center; bullets
+  still hit it.
 
 Tank explosions, crate pickups, glowing bullets, and crate spawn-ins are drawn
 procedurally. Fire, bounce, explosion, pickup, and round-win sounds are
