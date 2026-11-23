@@ -115,3 +115,5 @@ milestone boundary for player feedback.
   with lobby joins.
 - If all tanks are destroyed in the same round, it is a draw and no player
   receives a point.
+- The M6 scoreboard is a vertical list in a reserved right-side column so it
+  stays clear of the maze and can accommodate six players.

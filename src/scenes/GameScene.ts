@@ -155,6 +155,8 @@ export class GameScene extends Phaser.Scene {
         fontFamily: config.presentation.fontFamily,
         fontSize: `${config.presentation.scoreboardFontSize}px`,
         fontStyle: "bold",
+        align: "left",
+        lineSpacing: config.presentation.scoreboardRowSpacing,
       })
       .setOrigin(0.5);
     this.matchState = createMatchState(this.players.map((player) => player.id));
@@ -242,7 +244,11 @@ export class GameScene extends Phaser.Scene {
     const { width, height } = gameSize;
     const { boardPadding, titleTopOffset, titleHeight } =
       config.presentation;
-    const availableWidth = width - boardPadding * 2;
+    const availableWidth =
+      width -
+      boardPadding * 2 -
+      config.presentation.scoreboardWidth -
+      config.presentation.scoreboardGap;
     const availableHeight = height - boardPadding * 2 - titleHeight;
     const cellSize = Math.max(
       config.presentation.minimumCellSize,
@@ -256,15 +262,15 @@ export class GameScene extends Phaser.Scene {
     const boardHeight = cellSize * this.maze.rows;
     this.displayScale = cellSize / config.maze.cellSize;
     this.displayCellSize = cellSize;
-    this.boardLeft = (width - boardWidth) / 2;
+    this.boardLeft = boardPadding + (availableWidth - boardWidth) / 2;
     this.boardTop =
       boardPadding + titleHeight + (availableHeight - boardHeight) / 2;
 
     this.title.setPosition(width / 2, titleTopOffset);
     this.subtitle.setPosition(width / 2, titleTopOffset + titleHeight / 2);
     this.scoreboard.setPosition(
-      width / 2,
-      titleTopOffset + titleHeight + config.presentation.boardPadding / 4,
+      width - boardPadding - config.presentation.scoreboardWidth / 2,
+      this.boardTop + boardHeight / 2,
     );
     this.drawMaze(this.boardLeft, this.boardTop, cellSize);
     this.positionPlayers();
@@ -351,12 +357,13 @@ export class GameScene extends Phaser.Scene {
 
   private refreshMatchPresentation(): void {
     this.scoreboard.setText(
-      this.players
-        .map(
+      [
+        "SCORE",
+        ...this.players.map(
           (player, index) =>
             `P${index + 1} ${this.matchState.scores[player.id] ?? 0}`,
-        )
-        .join("     "),
+        ),
+      ].join("\n"),
     );
 
     const showStatus = this.matchState.phase !== "playing";

@@ -38,7 +38,8 @@ The test suite uses Vitest. The production build is written to `dist/`.
 ## Current milestone
 
 M6 renders a generated maze with two tanks, combat, rounds, and a scoreboard.
-The first player to five points wins. Player 1 uses the
+The scoreboard is stacked vertically on the right, and the first player to
+five points wins. Player 1 uses the
 gamepad at index 0 when active, or **W/S** to drive, **A/D** to turn, and
 **Space** to fire. Player 2 uses the arrow keys to drive/turn and **Enter** to
 fire. On a Standard-mapped gamepad, the left stick drives and turns; horizontal
