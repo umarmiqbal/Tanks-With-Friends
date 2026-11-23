@@ -1,10 +1,27 @@
 import Phaser from "phaser";
 import { config } from "../config";
 import { generateMaze, type Maze } from "../game/maze";
+import {
+  createMazeWallRects,
+  moveTank,
+  type TankState,
+  type WallRect,
+} from "../game/tankMovement";
+import type { InputSource } from "../input/InputSource";
+import { KeyboardInput } from "../input/KeyboardInput";
 
 export class GameScene extends Phaser.Scene {
   private maze!: Maze;
+  private wallRects!: WallRect[];
+  private tank!: TankState;
+  private inputSource!: InputSource;
+  private accumulator = 0;
+  private displayScale = 1;
+  private boardLeft = 0;
+  private boardTop = 0;
   private mazeGraphics!: Phaser.GameObjects.Graphics;
+  private tankGraphics!: Phaser.GameObjects.Graphics;
+  private tankMarker!: Phaser.GameObjects.Text;
   private title!: Phaser.GameObjects.Text;
   private subtitle!: Phaser.GameObjects.Text;
 
@@ -18,7 +35,32 @@ export class GameScene extends Phaser.Scene {
       config.maze.rows,
       config.maze.extraOpenings,
     );
+    this.wallRects = createMazeWallRects(
+      this.maze,
+      config.maze.cellSize,
+      config.maze.wallThickness,
+    );
+    this.tank = {
+      x: config.maze.cellSize * 1.5,
+      y: config.maze.cellSize * 0.5,
+      angle: 0,
+    };
+    this.inputSource = new KeyboardInput(
+      window,
+      config.input.keyboardSchemes[0],
+    );
     this.mazeGraphics = this.add.graphics();
+    this.tankGraphics = this.add.graphics().setDepth(1);
+    this.tankMarker = this.add
+      .text(0, 0, "1", {
+        color: config.presentation.markerColor,
+        fontFamily: config.presentation.fontFamily,
+        fontSize: `${config.presentation.tankMarkerFontSize}px`,
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5)
+      .setDepth(2);
+    this.drawTank();
     this.title = this.add
       .text(0, 0, "Tanks With Friends", {
         color: config.presentation.titleColor,
@@ -39,7 +81,23 @@ export class GameScene extends Phaser.Scene {
     this.layout({ width: this.scale.width, height: this.scale.height });
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.scale.off(Phaser.Scale.Events.RESIZE, this.layout, this);
+      this.inputSource.destroy();
     });
+  }
+
+  update(_time: number, deltaMilliseconds: number): void {
+    this.accumulator += deltaMilliseconds / 1000;
+    while (this.accumulator >= config.simulation.fixedTimeStep) {
+      this.tank = moveTank(
+        this.tank,
+        this.inputSource.read(),
+        config.simulation.fixedTimeStep,
+        this.wallRects,
+        config.tank,
+      );
+      this.accumulator -= config.simulation.fixedTimeStep;
+    }
+    this.positionTank();
   }
 
   private layout(gameSize: { width: number; height: number }): void {
@@ -58,12 +116,48 @@ export class GameScene extends Phaser.Scene {
     );
     const boardWidth = cellSize * this.maze.columns;
     const boardHeight = cellSize * this.maze.rows;
-    const boardLeft = (width - boardWidth) / 2;
-    const boardTop = boardPadding + titleHeight + (availableHeight - boardHeight) / 2;
+    this.displayScale = cellSize / config.maze.cellSize;
+    this.boardLeft = (width - boardWidth) / 2;
+    this.boardTop =
+      boardPadding + titleHeight + (availableHeight - boardHeight) / 2;
 
     this.title.setPosition(width / 2, titleTopOffset);
     this.subtitle.setPosition(width / 2, titleTopOffset + titleHeight / 2);
-    this.drawMaze(boardLeft, boardTop, cellSize);
+    this.drawMaze(this.boardLeft, this.boardTop, cellSize);
+    this.positionTank();
+  }
+
+  private drawTank(): void {
+    const graphics = this.tankGraphics;
+    const {
+      barrelLength,
+      barrelWidth,
+      radius,
+      turretRadius,
+      turretColor,
+      outlineColor,
+      outlineThickness,
+    } = config.tank;
+    graphics.fillStyle(config.presentation.playerColors[0]!);
+    graphics.fillRect(0, -barrelWidth / 2, barrelLength, barrelWidth);
+    graphics.fillCircle(0, 0, radius);
+    graphics.fillStyle(turretColor);
+    graphics.fillCircle(0, 0, turretRadius);
+    graphics.lineStyle(outlineThickness, outlineColor, 1);
+    graphics.strokeCircle(0, 0, radius);
+    graphics.strokeCircle(0, 0, turretRadius);
+  }
+
+  private positionTank(): void {
+    const x = this.boardLeft + this.tank.x * this.displayScale;
+    const y = this.boardTop + this.tank.y * this.displayScale;
+    this.tankGraphics
+      .setPosition(x, y)
+      .setRotation(this.tank.angle)
+      .setScale(this.displayScale);
+    this.tankMarker
+      .setPosition(x, y)
+      .setScale(this.displayScale);
   }
 
   private drawMaze(left: number, top: number, cellSize: number): void {

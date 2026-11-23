@@ -93,5 +93,9 @@ milestone boundary for player feedback.
   configurable.
 - A maze cell is square, with its size reduced uniformly as needed to fit the
   viewport while preserving the maze aspect ratio.
-- M1 displays a generated maze only; later milestones add the gameplay and
-  lobby rather than introducing placeholder controls early.
+- Keyboard tank controls use forward/back and left/right turn keys: WASD plus
+  Space for player one. Six distinct keyboard schemes are configured for later
+  lobby use.
+- M2's tank starts in the center of the second cell in the top-left row, facing
+  right. Simulation and wall collision use maze-cell world units; rendering
+  scales the tank together with the maze.

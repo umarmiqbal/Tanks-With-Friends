@@ -37,5 +37,6 @@ The test suite uses Vitest. The production build is written to `dist/`.
 
 ## Current milestone
 
-M1 renders a generated maze. Controls, multiplayer, rounds, and the lobby are
-planned milestones and are not implemented yet.
+M2 renders a generated maze and one keyboard-controlled tank. Multiplayer,
+gamepad controls, combat, rounds, and the lobby are planned milestones and are
+not implemented yet.
