@@ -15,6 +15,8 @@ describe("SoundEffects", () => {
     sound.playExplosion();
     sound.playRoundWin();
     sound.playPickup();
+    sound.playWeaponFire("rocket");
+    sound.playWeaponFire("lightning");
     sound.playMissileLock();
 
     expect(sound.isMuted).toBe(true);

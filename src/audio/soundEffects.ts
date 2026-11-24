@@ -1,5 +1,6 @@
 import { config } from "../config";
 import { createSeededRandom, type RandomSource } from "../game/random";
+import type { SpecialWeaponType } from "../game/weapons";
 
 export class SoundEffects {
   private context: AudioContext | null = null;
@@ -45,6 +46,21 @@ export class SoundEffects {
       config.audio.fireEndFrequency,
       config.audio.fireDuration,
       config.audio.fireWaveform,
+    );
+  }
+
+  playWeaponFire(weapon: SpecialWeaponType): void {
+    const context = this.getContext();
+    if (context === null) {
+      return;
+    }
+    const sound = config.audio.weaponFire[weapon];
+    this.playTone(
+      context,
+      sound.startFrequency,
+      sound.endFrequency,
+      sound.duration,
+      sound.waveform,
     );
   }
 

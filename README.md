@@ -37,7 +37,7 @@ The test suite uses Vitest. The production build is written to `dist/`.
 
 ## Current milestone
 
-M13 builds on the M7 lobby: press **Space**, **Enter**, or another keyboard
+M14 builds on the M7 lobby: press **Space**, **Enter**, or another keyboard
 scheme's fire key to join, or press any button on a Standard-mapped controller.
 A joined player presses that same fire input again to start; all joined
 controllers must be connected. Up to six players can join. If a controller
@@ -85,7 +85,12 @@ Passive crates also provide:
 Every crate now has a distinct procedural icon indicating its pickup: paired
 shots, rocket, pellet fan, bomb, shield, health cross, speed bolt, ghost, or
 aim path. Homing missiles, mines, lasers, and lightning also have separate
-large, color-coded icons.
+large, color-coded icons; each crate's fill and border now match its icon color.
+
+Open **SETTINGS** from the lobby to toggle powerups, set crate frequency
+(4–12 seconds), and adjust the score goal (1–10). Settings save automatically
+in this browser. Laser and lightning crates are rare; utility crates are more
+common. Special weapons have distinct synthesized firing sounds.
 
 Tank explosions, crate pickups, glowing bullets, and crate spawn-ins are drawn
 procedurally. Fire, bounce, explosion, pickup, and round-win sounds are

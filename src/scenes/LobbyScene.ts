@@ -5,6 +5,10 @@ import {
   setLobbyDeviceConnection,
 } from "../game/lobby";
 import { createRandomSeed } from "../game/random";
+import {
+  createBrowserSettingsStorage,
+  loadGameSettings,
+} from "../game/gameSettings";
 import type { LobbyPlayer, PlayerDevice, PlayerSetup } from "../game/playerSetup";
 import { GamepadInput } from "../input/GamepadInput";
 import { KeyboardInput } from "../input/KeyboardInput";
@@ -28,6 +32,7 @@ export class LobbyScene extends Phaser.Scene {
   private instructions!: Phaser.GameObjects.Text;
   private controls!: Phaser.GameObjects.Text;
   private footer!: Phaser.GameObjects.Text;
+  private settingsButton!: Phaser.GameObjects.Text;
 
   constructor() {
     super("lobby");
@@ -79,6 +84,16 @@ export class LobbyScene extends Phaser.Scene {
         align: "center",
       })
       .setOrigin(0.5);
+    this.settingsButton = this.add
+      .text(0, 0, "SETTINGS", {
+        color: config.presentation.audioToggleColor,
+        fontFamily: config.presentation.fontFamily,
+        fontSize: `${config.presentation.subtitleFontSize}px`,
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true })
+      .on("pointerdown", () => this.openSettings());
 
     for (let slot = 0; slot < config.input.maximumPlayers; slot += 1) {
       const background = this.add.graphics().setDepth(1);
@@ -206,7 +221,17 @@ export class LobbyScene extends Phaser.Scene {
     const players: PlayerSetup[] = this.players.map(
       ({ connected: _connected, ...setup }) => setup,
     );
-    this.scene.start("game", { players, randomSeed: createRandomSeed() });
+    const loadedSettings = loadGameSettings(createBrowserSettingsStorage());
+    this.scene.start("game", {
+      players,
+      randomSeed: createRandomSeed(),
+      settings: loadedSettings.settings,
+    });
+  }
+
+  private openSettings(): void {
+    this.scene.launch("settings");
+    this.scene.pause();
   }
 
   private deviceName(device: PlayerDevice): string {
@@ -303,7 +328,17 @@ export class LobbyScene extends Phaser.Scene {
       width / 2,
       Math.min(
         config.presentation.lobbyFooterTopOffset,
-        height - config.presentation.lobbyFooterBottomOffset,
+        height -
+          config.presentation.lobbyFooterBottomOffset -
+          config.presentation.lobbySettingsOffset,
+      ),
+    );
+    this.settingsButton.setPosition(
+      width / 2,
+      Math.min(
+        config.presentation.lobbyFooterTopOffset +
+          config.presentation.lobbySettingsOffset,
+        height - config.presentation.lobbyFooterBottomOffset / 2,
       ),
     );
 

@@ -13,6 +13,10 @@ import {
   type PowerupCrate,
 } from "../game/crates";
 import { advanceCombat, type CombatState } from "../game/combat";
+import {
+  defaultGameSettings,
+  type GameSettings,
+} from "../game/gameSettings";
 import { generateMaze, type Maze } from "../game/maze";
 import {
   createRandomSeed,
@@ -39,6 +43,7 @@ import {
   type PowerupType,
   type TankPowerupState,
 } from "../game/tankPowerups";
+import { getPowerupColors } from "../game/powerupVisuals";
 import {
   createSpecialWeapon,
   WeaponLoadout,
@@ -103,7 +108,8 @@ export class GameScene extends Phaser.Scene {
   private pickupEffects: PickupEffect[] = [];
   private beamEffects: BeamEffect[] = [];
   private random!: RandomSource;
-  private crateSpawnRemaining = config.powerups.crateSpawnInterval;
+  private settings: GameSettings = { ...defaultGameSettings };
+  private crateSpawnRemaining = defaultGameSettings.crateSpawnInterval;
   private matchState!: MatchState;
   private accumulator = 0;
   private controllerDisconnected = false;
@@ -133,8 +139,13 @@ export class GameScene extends Phaser.Scene {
     super("game");
   }
 
-  init(data: { players: PlayerSetup[]; randomSeed?: number }): void {
+  init(data: {
+    players: PlayerSetup[];
+    randomSeed?: number;
+    settings?: GameSettings;
+  }): void {
     this.playerSetups = data.players;
+    this.settings = data.settings ?? { ...defaultGameSettings };
     this.random = createSeededRandom(data.randomSeed ?? createRandomSeed());
   }
 
@@ -145,7 +156,7 @@ export class GameScene extends Phaser.Scene {
     this.crates = [];
     this.pickupEffects = [];
     this.beamEffects = [];
-    this.crateSpawnRemaining = config.powerups.crateSpawnInterval;
+    this.crateSpawnRemaining = this.settings.crateSpawnInterval;
     this.accumulator = 0;
     this.controllerDisconnected = false;
     this.pausedForDisconnect = false;
@@ -342,7 +353,7 @@ export class GameScene extends Phaser.Scene {
           .filter((player) => player.alive)
           .map((player) => player.id),
         config.simulation.fixedTimeStep,
-        config.match,
+        { ...config.match, scoreToWin: this.settings.scoreToWin },
       );
       this.matchState = matchUpdate.state;
       if (previousMatch.phase === "playing" && this.matchState.phase !== "playing") {
@@ -595,7 +606,7 @@ export class GameScene extends Phaser.Scene {
     this.generateRoundMaze();
     this.bullets = [];
     this.crates = [];
-    this.crateSpawnRemaining = config.powerups.crateSpawnInterval;
+    this.crateSpawnRemaining = this.settings.crateSpawnInterval;
     const spawnPoints = this.getSpawnPoints();
     for (const [index, player] of this.players.entries()) {
       const spawn = spawnPoints[index]!;
@@ -835,6 +846,7 @@ export class GameScene extends Phaser.Scene {
       config.bullet.radius,
     );
     const hadSpecialWeapon = player.weapons.specialWeapon !== null;
+    const weaponType = player.weapons.currentWeapon.type;
     const result = player.weapons.fire({
       ownerId: player.id,
       origin,
@@ -844,7 +856,11 @@ export class GameScene extends Phaser.Scene {
     });
     if (result.bullets.length > 0) {
       this.bullets.push(...result.bullets);
-      soundEffects.playFire();
+      if (weaponType === "cannon") {
+        soundEffects.playFire();
+      } else {
+        soundEffects.playWeaponFire(weaponType);
+      }
       if (result.bullets.some((bullet) => bullet.kind === "homing-missile")) {
         soundEffects.playMissileLock();
       }
@@ -970,16 +986,20 @@ export class GameScene extends Phaser.Scene {
   }
 
   private updateCrates(deltaSeconds: number): void {
+    if (!this.settings.powerupsEnabled) {
+      return;
+    }
+
     this.crates = this.crates.map((crate) => ({
       ...crate,
       elapsed: crate.elapsed + deltaSeconds,
     }));
     this.crateSpawnRemaining -= deltaSeconds;
     if (this.crateSpawnRemaining <= 0) {
-      if (config.powerups.crateSpawnInterval <= 0) {
+      if (this.settings.crateSpawnInterval <= 0) {
         throw new RangeError("Crate spawn interval must be greater than zero.");
       }
-      this.crateSpawnRemaining += config.powerups.crateSpawnInterval;
+      this.crateSpawnRemaining += this.settings.crateSpawnInterval;
       const spawnedCrate = spawnPowerupCrate(
         this.maze,
         this.crates,
@@ -1065,13 +1085,17 @@ export class GameScene extends Phaser.Scene {
       const x = this.boardLeft + center.x * this.displayScale;
       const y = this.boardTop + center.y * this.displayScale;
       const alpha = spawnProgress;
+      const { crate: crateColor } = getPowerupColors(crate.powerupId);
 
-      graphics.fillStyle(config.presentation.powerupCrateFillColor, alpha);
+      graphics.fillStyle(
+        crateColor,
+        alpha * config.presentation.powerupCrateFillAlpha,
+      );
       graphics.fillRect(x - size / 2, y - size / 2, size, size);
       graphics.lineStyle(
         config.presentation.powerupCrateBorderThickness * this.displayScale,
-        config.presentation.powerupCrateBorderColor,
-        alpha,
+        crateColor,
+        alpha * config.presentation.powerupCrateBorderAlpha,
       );
       graphics.strokeRect(x - size / 2, y - size / 2, size, size);
 
@@ -1096,8 +1120,7 @@ export class GameScene extends Phaser.Scene {
     size: number,
     alpha: number,
   ): void {
-    const color =
-      config.presentation.powerupCrateIconColors[powerup];
+    const { icon: color } = getPowerupColors(powerup);
     const lineThickness =
       config.presentation.powerupCrateIconLineThickness * this.displayScale;
     graphics.fillStyle(color, alpha);
@@ -1227,7 +1250,7 @@ export class GameScene extends Phaser.Scene {
         graphics.fillCircle(x, y - size * 0.08, size * 0.28);
         graphics.fillRect(x - size * 0.28, y - size * 0.08, size * 0.56, size * 0.3);
         for (const eyeOffset of [-0.1, 0.1]) {
-          graphics.fillStyle(config.presentation.powerupCrateFillColor, alpha);
+          graphics.fillStyle(config.presentation.floorColor, alpha);
           graphics.fillCircle(
             x + size * eyeOffset,
             y - size * 0.05,
@@ -1413,7 +1436,7 @@ export class GameScene extends Phaser.Scene {
   private clearRoundPowerups(): void {
     this.crates = [];
     this.beamEffects = [];
-    this.crateSpawnRemaining = config.powerups.crateSpawnInterval;
+    this.crateSpawnRemaining = this.settings.crateSpawnInterval;
     for (const player of this.players) {
       player.weapons.reset();
       player.powerups = createTankPowerupState(config.powerups.tankEffects);

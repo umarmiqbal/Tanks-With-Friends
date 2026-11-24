@@ -112,6 +112,11 @@ runtime.
   all beam segments including the shooter. Lightning instantly hits the nearest
   unobstructed tank, chains through additional nearby tanks, and never targets
   the shooter.
+- M14 tunes crate weights to make laser and lightning rare, adds separate
+  procedural firing sounds for each special weapon, and provides a lobby
+  settings screen for powerups, crate frequency, and score-to-win.
+- Crate bodies and borders use the same unique per-powerup colors as their
+  icons, preserving the existing icon palette.
 
 ## Milestones
 
@@ -137,6 +142,8 @@ runtime.
     mine arming/triggers, and pure homing/mine tests.
 13. **M13 — Laser and lightning:** charge/linger beams, reflected beam geometry,
     line-of-sight lightning selection, and chain limits.
+14. **M14 — Balance and polish:** tune weights and sounds, add lobby settings
+    with localStorage persistence, and keep six-player effects readable.
 
 Each milestone is validated with `npx tsc --noEmit`, `npm test`, and
 `npm run build`, then committed before playtesting. Work stops at each
@@ -194,6 +201,15 @@ milestone boundary for player feedback.
   continuously while active, does not replace a weapon, and predicts up to 8
   standard bouncing bullet reflections even while another special is held.
 - The Rocket crate has a slightly higher weight than most crate types.
+- M14 makes Shield, Extra Life, and Speed Boost common; Ghost and Aim Guide
+  somewhat common; projectile weapons less common; and Laser/Lightning rare.
+  Settings expose crate intervals of 4, 6, 8, 10, or 12 seconds and score goals
+  from 1 through 10.
+- Settings are saved in browser localStorage and loaded when a match starts.
+  Disabling powerups prevents crates from spawning for that match; it does not
+  remove the maze, combat, or scoreboard.
+- Each special weapon has its own synthesized fire tone. Crate fill and border
+  colors use the established icon color for that powerup.
 - Homing missiles use limited turn-rate steering and bounce off walls. The
   shooter becomes a valid target after the arming delay.
 - Ghost may leave the maze while active because Ghost disables the normal tank
