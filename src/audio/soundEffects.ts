@@ -110,6 +110,18 @@ export class SoundEffects {
     );
   }
 
+  playMissileLock(): void {
+    const context = this.getContext();
+    if (context === null) return;
+    this.playTone(
+      context,
+      config.audio.missileLockStartFrequency,
+      config.audio.missileLockEndFrequency,
+      config.audio.missileLockDuration,
+      config.audio.missileLockWaveform,
+    );
+  }
+
   private getContext(): AudioContext | null {
     if (this.muted || this.contextUnavailable) {
       return null;

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { config } from "../src/config";
 import {
   DoubleShotWeapon,
+  HomingMissileWeapon,
+  MineWeapon,
   ShotgunWeapon,
   WeaponLoadout,
 } from "../src/game/weapons";
@@ -68,6 +70,22 @@ describe("weapon loadouts", () => {
     for (let index = 0; index < angles.length; index += 1) {
       expect(angles[index]).toBeCloseTo(-angles[angles.length - index - 1]!);
     }
+  });
+
+  it("creates homing missiles and mines with the configured timers", () => {
+    const homing = new HomingMissileWeapon().onFire(fireContext);
+    const mine = new MineWeapon().onFire(fireContext);
+
+    expect(homing).toHaveLength(1);
+    expect(homing[0]!.kind).toBe("homing-missile");
+    expect(homing[0]!.armingRemaining).toBe(
+      config.powerups.homingMissile.armingDelay,
+    );
+    expect(homing[0]!.turnRate).toBe(config.powerups.homingMissile.turnRate);
+    expect(mine).toHaveLength(1);
+    expect(mine[0]!.kind).toBe("mine");
+    expect(mine[0]!.armingRemaining).toBe(config.powerups.mine.armingDelay);
+    expect(mine[0]!.timeoutRemaining).toBe(config.powerups.mine.timeout);
   });
 
   it("lets all five volleys fire under the special's bullet cap", () => {

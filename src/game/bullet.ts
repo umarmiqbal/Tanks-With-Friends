@@ -1,7 +1,8 @@
 import type { WallRect } from "./tankMovement";
+import { findNearestHomingTarget, steerHomingVelocity } from "./homing";
 
 export interface BulletState {
-  kind?: "bullet" | "rocket" | "frag-bomb" | "shrapnel";
+  kind?: "bullet" | "rocket" | "frag-bomb" | "shrapnel" | "homing-missile" | "mine";
   ownerId: string;
   x: number;
   y: number;
@@ -11,6 +12,12 @@ export interface BulletState {
   remainingLifetime: number;
   bounceCount: number;
   fuseRemaining?: number;
+  armingRemaining?: number;
+  timeoutRemaining?: number;
+  triggerRadius?: number;
+  blastRadius?: number;
+  turnRate?: number;
+  blinkElapsed?: number;
 }
 
 export interface BulletTarget {
@@ -153,7 +160,14 @@ function findFirstTankHit(
   for (const target of targets) {
     if (
       !target.alive ||
-      (target.id === bullet.ownerId && bullet.bounceCount === 0)
+      (
+        target.id === bullet.ownerId &&
+        bullet.bounceCount === 0 &&
+        !(
+          bullet.kind === "homing-missile" &&
+          (bullet.armingRemaining ?? 0) === 0
+        )
+      )
     ) {
       continue;
     }
@@ -262,6 +276,56 @@ export function advanceBullet(
   settings: Pick<BulletSettings, "collisionEpsilon">,
   targets: readonly BulletTarget[] = [],
 ): BulletAdvanceResult {
+  if (bullet.kind === "mine") {
+    const armingRemaining = Math.max(
+      0,
+      (bullet.armingRemaining ?? 0) - deltaSeconds,
+    );
+    const timeoutRemaining = Math.max(
+      0,
+      (bullet.timeoutRemaining ?? 0) - deltaSeconds,
+    );
+    if (timeoutRemaining === 0) {
+      return {
+        bullet: null,
+        hitTankId: null,
+        bounceCount: bullet.bounceCount,
+        detonation: { x: bullet.x, y: bullet.y },
+        path: [],
+      };
+    }
+    if (armingRemaining === 0) {
+      const triggered = targets.some(
+        (tank) =>
+          tank.alive &&
+          Math.hypot(tank.x - bullet.x, tank.y - bullet.y) <=
+            (bullet.triggerRadius ?? 0),
+      );
+      if (triggered) {
+        return {
+          bullet: null,
+          hitTankId: null,
+          bounceCount: bullet.bounceCount,
+          detonation: { x: bullet.x, y: bullet.y },
+          path: [],
+        };
+      }
+    }
+    return {
+      bullet: {
+        ...bullet,
+        armingRemaining,
+        timeoutRemaining,
+        remainingLifetime: timeoutRemaining,
+        blinkElapsed: (bullet.blinkElapsed ?? 0) + deltaSeconds,
+      },
+      hitTankId: null,
+      bounceCount: bullet.bounceCount,
+      detonation: null,
+      path: [],
+    };
+  }
+
   if (bullet.remainingLifetime <= 0) {
     return {
       bullet: null,
@@ -294,6 +358,43 @@ export function advanceBullet(
   const path: BulletPathSegment[] = [];
 
   while (remainingTime > 0) {
+    if (bullet.kind === "homing-missile") {
+      const armingRemaining = Math.max(
+        0,
+        (bullet.armingRemaining ?? 0) - remainingTime,
+      );
+      bullet = { ...bullet, armingRemaining };
+      if (armingRemaining === 0) {
+        const target = findNearestHomingTarget(
+          {
+            x: bullet.x,
+            y: bullet.y,
+            velocityX,
+            velocityY,
+            ownerId: bullet.ownerId,
+            armingRemaining,
+          },
+          targets,
+        );
+        if (target !== null) {
+          const steered = steerHomingVelocity(
+            {
+              x: bullet.x,
+              y: bullet.y,
+              velocityX,
+              velocityY,
+              ownerId: bullet.ownerId,
+              armingRemaining,
+            },
+            target,
+            bullet.turnRate ?? 0,
+            remainingTime,
+          );
+          velocityX = steered.velocityX;
+          velocityY = steered.velocityY;
+        }
+      }
+    }
     const deltaX = velocityX * remainingTime;
     const deltaY = velocityY * remainingTime;
     const hit = findFirstHit(

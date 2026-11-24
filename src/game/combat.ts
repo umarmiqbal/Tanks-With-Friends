@@ -72,6 +72,18 @@ export function advanceCombat(
             applyDamage(tank, invulnerabilityDuration, events);
           }
         }
+      } else if (bullet.kind === "mine") {
+        const blastRadius = bullet.blastRadius ?? 0;
+        for (const tank of tanks) {
+          if (!tank.alive) continue;
+          const distance = Math.hypot(
+            tank.x - result.detonation.x,
+            tank.y - result.detonation.y,
+          );
+          if (distance <= blastRadius + tank.radius) {
+            applyDamage(tank, invulnerabilityDuration, events);
+          }
+        }
       } else if (bullet.kind === "frag-bomb") {
         bullets.push(
           ...createFragShrapnel(

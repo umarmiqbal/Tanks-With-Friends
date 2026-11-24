@@ -10,7 +10,9 @@ export type WeaponType =
   | "double-shot"
   | "rocket"
   | "shotgun"
-  | "frag-bomb";
+  | "frag-bomb"
+  | "homing-missile"
+  | "mine";
 export type SpecialWeaponType = Exclude<WeaponType, "cannon">;
 
 export interface WeaponFireContext {
@@ -310,6 +312,112 @@ export class FragBombWeapon implements Weapon {
   }
 }
 
+export class HomingMissileWeapon implements Weapon {
+  readonly type = "homing-missile" as const;
+  readonly hudIcon = "HOM";
+  private currentAmmo: number = config.powerups.homingMissile.ammo;
+  private currentRemainingTime: number = config.powerups.homingMissile.duration;
+  private cooldownRemaining = 0;
+
+  get ammoRemaining(): number {
+    return this.currentAmmo;
+  }
+
+  get remainingTime(): number {
+    return this.currentRemainingTime;
+  }
+
+  update(deltaSeconds: number): void {
+    this.cooldownRemaining = Math.max(0, this.cooldownRemaining - deltaSeconds);
+    this.currentRemainingTime = Math.max(
+      0,
+      this.currentRemainingTime - deltaSeconds,
+    );
+  }
+
+  onFire(context: WeaponFireContext): BulletState[] {
+    if (this.isExpired() || this.cooldownRemaining > 0) return [];
+    const bullet = tryCreateBullet(
+      context.ownerId,
+      context.origin,
+      context.angle,
+      context.activeBullets,
+      {
+        ...context.bulletSettings,
+        speed: config.powerups.homingMissile.speed,
+        lifetime: config.powerups.homingMissile.lifetime,
+        radius: config.powerups.homingMissile.radius,
+      },
+    );
+    if (bullet === null) return [];
+    bullet.kind = "homing-missile";
+    bullet.armingRemaining = config.powerups.homingMissile.armingDelay;
+    bullet.turnRate = config.powerups.homingMissile.turnRate;
+    this.currentAmmo -= 1;
+    this.cooldownRemaining = config.bullet.fireCooldown;
+    return [bullet];
+  }
+
+  isExpired(): boolean {
+    return this.currentAmmo <= 0 || this.currentRemainingTime <= 0;
+  }
+}
+
+export class MineWeapon implements Weapon {
+  readonly type = "mine" as const;
+  readonly hudIcon = "MIN";
+  private currentAmmo: number = config.powerups.mine.ammo;
+  private currentRemainingTime: number = config.powerups.mine.duration;
+  private cooldownRemaining = 0;
+
+  get ammoRemaining(): number {
+    return this.currentAmmo;
+  }
+
+  get remainingTime(): number {
+    return this.currentRemainingTime;
+  }
+
+  update(deltaSeconds: number): void {
+    this.cooldownRemaining = Math.max(0, this.cooldownRemaining - deltaSeconds);
+    this.currentRemainingTime = Math.max(
+      0,
+      this.currentRemainingTime - deltaSeconds,
+    );
+  }
+
+  onFire(context: WeaponFireContext): BulletState[] {
+    if (this.isExpired() || this.cooldownRemaining > 0) return [];
+    const mine: BulletState = {
+      kind: "mine",
+      ownerId: context.ownerId,
+      x: context.origin.x,
+      y: context.origin.y,
+      velocityX: 0,
+      velocityY: 0,
+      radius: config.powerups.mine.radius,
+      remainingLifetime: config.powerups.mine.timeout,
+      timeoutRemaining: config.powerups.mine.timeout,
+      armingRemaining: config.powerups.mine.armingDelay,
+      triggerRadius: config.powerups.mine.triggerRadius,
+      blastRadius: config.powerups.mine.blastRadius,
+      bounceCount: 0,
+      blinkElapsed: 0,
+    };
+    const ownedCount = context.activeBullets.filter(
+      (bullet) => bullet.ownerId === context.ownerId,
+    ).length;
+    if (ownedCount >= context.bulletSettings.maxPerTank) return [];
+    this.currentAmmo -= 1;
+    this.cooldownRemaining = config.bullet.fireCooldown;
+    return [mine];
+  }
+
+  isExpired(): boolean {
+    return this.currentAmmo <= 0 || this.currentRemainingTime <= 0;
+  }
+}
+
 export class WeaponLoadout {
   readonly defaultCannon = new DefaultCannon();
   private special: Weapon | null = null;
@@ -375,6 +483,10 @@ export function createSpecialWeapon(type: SpecialWeaponType): Weapon {
       return new ShotgunWeapon();
     case "frag-bomb":
       return new FragBombWeapon();
+    case "homing-missile":
+      return new HomingMissileWeapon();
+    case "mine":
+      return new MineWeapon();
     default: {
       const unsupportedType: never = type;
       throw new RangeError(`Unknown special weapon: ${unsupportedType}`);

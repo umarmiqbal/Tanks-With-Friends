@@ -71,8 +71,12 @@ Passive crates also provide:
 - **Shotgun** — a fan of short-lived bullets that bounce off walls.
 - **Frag Bomb** — a slow bomb that detonates on a fuse or tank contact and
   releases bouncing shrapnel.
-- **Aim Guide** — while this timed pickup is active, hold fire to show a subtle
-  dotted preview of the bouncing cannon path.
+- **Aim Guide** — while this timed pickup is active, a subtle dotted preview
+  of the bouncing cannon path stays visible continuously through eight bounces.
+- **Homing Missile** — a bouncing missile that steers toward the nearest tank
+  and becomes able to target its shooter after arming.
+- **Mine** — a delayed-arming explosive that blinks when armed, triggers on
+  nearby tanks, or detonates after its timeout.
 
 Every crate now has a distinct procedural icon indicating its pickup: paired
 shots, rocket, pellet fan, bomb, shield, health cross, speed bolt, ghost, or

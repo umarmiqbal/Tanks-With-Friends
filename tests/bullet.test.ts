@@ -6,6 +6,7 @@ import {
 } from "../src/game/bullet";
 import type { BulletSettings, BulletState } from "../src/game/bullet";
 import type { WallRect } from "../src/game/tankMovement";
+import { config } from "../src/config";
 
 const settings: BulletSettings = {
   speed: 100,
@@ -156,6 +157,22 @@ describe("advanceBullet", () => {
     );
 
     expect(advanced).toBeNull();
+  });
+
+  it("expires a homing missile after its limited lifetime", () => {
+    const result = advanceBullet(
+      bullet({
+        kind: "homing-missile",
+        remainingLifetime: 0.01,
+        armingRemaining: 0,
+        turnRate: config.powerups.homingMissile.turnRate,
+      }),
+      0.02,
+      [],
+      settings,
+    );
+
+    expect(result.bullet).toBeNull();
   });
 
   it("decreases lifetime while moving", () => {

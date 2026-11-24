@@ -101,8 +101,12 @@ runtime.
   nearby tanks, including the shooter. Shotgun fires a short-lived bouncing
   fan. Frag Bombs detonate on fuse expiry or tank contact and release short-lived
   bouncing shrapnel.
-- **Aim Guide** is a timed passive pickup. While its holder holds fire, show a
-  subtle player-colored dotted preview with swept wall bounces.
+- **Aim Guide** is a timed passive pickup. It continuously shows a subtle
+  player-colored dotted preview through up to eight swept wall bounces.
+- M12 adds **Homing Missile** and **Mine**. Homing missiles steer toward the
+  nearest tank with a limited turn rate, bounce off walls, and become able to
+  target their shooter after a short arming delay. Mines arm after a delay,
+  detonate inside a trigger radius or at timeout, and use a small radial blast.
 
 ## Milestones
 
@@ -124,6 +128,8 @@ runtime.
     and ghost, with damage and expiry tests.
 11. **M11 — Projectile weapons and aim guide:** rocket, shotgun, frag bomb, and
     a bounced-path preview sharing the live projectile collision logic.
+12. **M12 — Homing missile and mine:** limited steering, target selection,
+    mine arming/triggers, and pure homing/mine tests.
 
 Each milestone is validated with `npx tsc --noEmit`, `npm test`, and
 `npm run build`, then committed before playtesting. Work stops at each
@@ -178,8 +184,11 @@ milestone boundary for player feedback.
 - Frag Bombs bounce normally until their fuse expires or they contact a tank;
   tank contact damages that tank and also releases shrapnel.
 - Aim Guide is a timed passive pickup, does not replace a weapon, and appears
-  only while the holder is pressing the normal fire input. It predicts a
-  standard bouncing bullet path, even while another special weapon is held.
+  continuously while active, does not replace a weapon, and predicts up to 8
+  standard bouncing bullet reflections even while another special is held.
+- The Rocket crate has a slightly higher weight than most crate types.
+- Homing missiles use limited turn-rate steering and bounce off walls. The
+  shooter becomes a valid target after the arming delay.
 - A Ghost tank that expires while overlapping a wall is moved to the nearest
   maze-cell center that can fit the tank. This uses a deterministic
   row-then-column tie break.

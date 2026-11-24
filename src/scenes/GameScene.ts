@@ -291,8 +291,7 @@ export class GameScene extends Phaser.Scene {
             );
           }
           const playerInput = player.inputSource.read();
-          player.aimGuideHeld =
-            playerInput.fire && player.powerups.aimGuideRemaining > 0;
+          player.aimGuideHeld = player.powerups.aimGuideRemaining > 0;
           if (this.controllerDisconnected) {
             break;
           }
@@ -824,6 +823,9 @@ export class GameScene extends Phaser.Scene {
     if (result.bullets.length > 0) {
       this.bullets.push(...result.bullets);
       soundEffects.playFire();
+      if (result.bullets.some((bullet) => bullet.kind === "homing-missile")) {
+        soundEffects.playMissileLock();
+      }
     }
     if (
       hadSpecialWeapon &&
@@ -849,6 +851,24 @@ export class GameScene extends Phaser.Scene {
     }
     graphics.fillStyle(config.presentation.bulletColor);
     for (const bullet of this.bullets) {
+      if (bullet.kind === "mine") {
+        const blink =
+          (bullet.armingRemaining ?? 0) === 0 &&
+          Math.floor(
+            (bullet.blinkElapsed ?? 0) /
+              config.powerups.mine.blinkDuration,
+          ) % 2 ===
+            0;
+        graphics.fillStyle(
+          blink
+            ? config.presentation.mineArmedColor
+            : config.presentation.bulletColor,
+        );
+      } else if (bullet.kind === "homing-missile") {
+        graphics.fillStyle(config.presentation.powerupPickupColor);
+      } else {
+        graphics.fillStyle(config.presentation.bulletColor);
+      }
       graphics.fillCircle(
         this.boardLeft + bullet.x * this.displayScale,
         this.boardTop + bullet.y * this.displayScale,
@@ -972,6 +992,8 @@ export class GameScene extends Phaser.Scene {
         case "rocket":
         case "shotgun":
         case "frag-bomb":
+        case "homing-missile":
+        case "mine":
           player.weapons.pickUp(createSpecialWeapon(crate.powerupId));
           break;
         default:
@@ -1202,6 +1224,34 @@ export class GameScene extends Phaser.Scene {
         );
         break;
       }
+      case "homing-missile":
+        graphics.fillTriangle(
+          x,
+          y - size * 0.38,
+          x - size * 0.24,
+          y + size * 0.28,
+          x + size * 0.24,
+          y + size * 0.28,
+        );
+        graphics.beginPath();
+        graphics.moveTo(x - size * 0.16, y + size * 0.2);
+        graphics.lineTo(x - size * 0.38, y + size * 0.38);
+        graphics.moveTo(x + size * 0.16, y + size * 0.2);
+        graphics.lineTo(x + size * 0.38, y + size * 0.38);
+        graphics.strokePath();
+        break;
+      case "mine":
+        graphics.fillCircle(x, y, size * 0.28);
+        for (let point = 0; point < 8; point += 1) {
+          const angle = (point / 8) * Math.PI * 2;
+          graphics.fillRect(
+            x + Math.cos(angle) * size * 0.34 - size * 0.04,
+            y + Math.sin(angle) * size * 0.34 - size * 0.04,
+            size * 0.08,
+            size * 0.08,
+          );
+        }
+        break;
       default: {
         const unsupportedPowerup: never = powerup;
         throw new RangeError(`Unknown crate icon: ${unsupportedPowerup}`);
