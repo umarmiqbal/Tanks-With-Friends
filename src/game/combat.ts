@@ -7,6 +7,7 @@ import {
 import type { WallRect } from "./tankMovement";
 import { createFragShrapnel, type ShrapnelSettings } from "./projectiles";
 import { applyTankHit, type TankPowerupState } from "./tankPowerups";
+import { findLaserTargets } from "./laser";
 
 export interface CombatTank extends BulletTarget {
   powerups: TankPowerupState;
@@ -20,6 +21,7 @@ export interface CombatState {
 export type CombatEvent =
   | { type: "bounce"; ownerId: string }
   | { type: "explosion"; ownerId: string; x: number; y: number }
+  | { type: "beam"; ownerId: string; kind: "laser" | "lightning"; segments: { start: { x: number; y: number }; end: { x: number; y: number } }[] }
   | { type: "tank-destroyed"; tankId: string; x: number; y: number };
 
 export interface CombatUpdate extends CombatState {
@@ -45,6 +47,36 @@ export function advanceCombat(
 
   for (const bullet of state.bullets) {
     const result = advanceBullet(bullet, deltaSeconds, walls, settings, tanks);
+    if (
+      result.beamSegments !== undefined &&
+      result.beamSegments.length > 0
+    ) {
+      events.push({
+        type: "beam",
+        ownerId: bullet.ownerId,
+        kind:
+          bullet.kind === "lightning"
+            ? "lightning"
+            : "laser",
+        segments: result.beamSegments,
+      });
+      if (bullet.kind === "laser") {
+        for (const target of findLaserTargets(tanks, result.beamSegments)) {
+          const hitTank = tanks.find((tank) => tank.id === target.id);
+          if (hitTank !== undefined) {
+            applyDamage(hitTank, invulnerabilityDuration, events);
+          }
+        }
+      }
+      if (bullet.kind === "lightning") {
+        for (const target of result.lightningTargets ?? []) {
+          const hitTank = tanks.find((tank) => tank.id === target.id);
+          if (hitTank !== undefined) {
+            applyDamage(hitTank, invulnerabilityDuration, events);
+          }
+        }
+      }
+    }
     for (
       let bounce = bullet.bounceCount;
       bounce < result.bounceCount;

@@ -85,6 +85,13 @@ interface PickupEffect {
   elapsed: number;
 }
 
+interface BeamEffect {
+  ownerId: string;
+  kind: "laser" | "lightning";
+  segments: { start: { x: number; y: number }; end: { x: number; y: number } }[];
+  elapsed: number;
+}
+
 export class GameScene extends Phaser.Scene {
   private maze!: Maze;
   private wallRects!: WallRect[];
@@ -94,6 +101,7 @@ export class GameScene extends Phaser.Scene {
   private explosions: ExplosionEffect[] = [];
   private crates: ActiveCrate[] = [];
   private pickupEffects: PickupEffect[] = [];
+  private beamEffects: BeamEffect[] = [];
   private random!: RandomSource;
   private crateSpawnRemaining = config.powerups.crateSpawnInterval;
   private matchState!: MatchState;
@@ -111,6 +119,7 @@ export class GameScene extends Phaser.Scene {
   private explosionGraphics!: Phaser.GameObjects.Graphics;
   private crateGraphics!: Phaser.GameObjects.Graphics;
   private pickupGraphics!: Phaser.GameObjects.Graphics;
+  private beamGraphics!: Phaser.GameObjects.Graphics;
   private disconnectPanel!: Phaser.GameObjects.Graphics;
   private disconnectMessage!: Phaser.GameObjects.Text;
   private statusPanel!: Phaser.GameObjects.Graphics;
@@ -135,6 +144,7 @@ export class GameScene extends Phaser.Scene {
     this.explosions = [];
     this.crates = [];
     this.pickupEffects = [];
+    this.beamEffects = [];
     this.crateSpawnRemaining = config.powerups.crateSpawnInterval;
     this.accumulator = 0;
     this.controllerDisconnected = false;
@@ -151,6 +161,7 @@ export class GameScene extends Phaser.Scene {
       .graphics()
       .setDepth(config.presentation.powerupCrateDepth);
     this.pickupGraphics = this.add.graphics().setDepth(5);
+    this.beamGraphics = this.add.graphics().setDepth(6);
     if (
       this.playerSetups.length === 0 ||
       this.playerSetups.length > config.input.maximumPlayers
@@ -253,6 +264,7 @@ export class GameScene extends Phaser.Scene {
   update(_time: number, deltaMilliseconds: number): void {
     this.updateExplosions(deltaMilliseconds / 1000);
     this.updatePickupEffects(deltaMilliseconds / 1000);
+    this.updateBeamEffects(deltaMilliseconds / 1000);
     this.accumulator += deltaMilliseconds / 1000;
     while (this.accumulator >= config.simulation.fixedTimeStep) {
       if (this.matchState.phase === "matchOver") {
@@ -357,6 +369,7 @@ export class GameScene extends Phaser.Scene {
     this.drawCrates();
     this.drawExplosions();
     this.drawPickupEffects();
+    this.drawBeamEffects();
   }
 
   private layout(gameSize: { width: number; height: number }): void {
@@ -757,6 +770,15 @@ export class GameScene extends Phaser.Scene {
     this.bullets = nextState.bullets;
     let weaponChanged = false;
     for (const event of nextState.events) {
+      if (event.type === "beam") {
+        this.beamEffects.push({
+          ownerId: event.ownerId,
+          kind: event.kind,
+          segments: event.segments,
+          elapsed: 0,
+        });
+        continue;
+      }
       if (event.type === "bounce") {
         soundEffects.playBounce();
         continue;
@@ -851,6 +873,20 @@ export class GameScene extends Phaser.Scene {
     }
     graphics.fillStyle(config.presentation.bulletColor);
     for (const bullet of this.bullets) {
+      if (bullet.kind === "laser") {
+        graphics.lineStyle(
+          2 * this.displayScale,
+          config.presentation.powerupPickupColor,
+          0.5,
+        );
+        graphics.strokeCircle(
+          this.boardLeft + bullet.x * this.displayScale,
+          this.boardTop + bullet.y * this.displayScale,
+          12 * this.displayScale,
+        );
+        continue;
+      }
+      if (bullet.kind === "lightning") continue;
       if (bullet.kind === "mine") {
         const blink =
           (bullet.armingRemaining ?? 0) === 0 &&
@@ -994,6 +1030,8 @@ export class GameScene extends Phaser.Scene {
         case "frag-bomb":
         case "homing-missile":
         case "mine":
+        case "laser":
+        case "lightning":
           player.weapons.pickUp(createSpecialWeapon(crate.powerupId));
           break;
         default:
@@ -1058,7 +1096,8 @@ export class GameScene extends Phaser.Scene {
     size: number,
     alpha: number,
   ): void {
-    const color = config.presentation.powerupCrateIconColor;
+    const color =
+      config.presentation.powerupCrateIconColors[powerup];
     const lineThickness =
       config.presentation.powerupCrateIconLineThickness * this.displayScale;
     graphics.fillStyle(color, alpha);
@@ -1252,9 +1291,85 @@ export class GameScene extends Phaser.Scene {
           );
         }
         break;
+      case "laser":
+        graphics.lineStyle(
+          size * config.presentation.powerupCrateIconLaserWidthScale,
+          color,
+          alpha,
+        );
+        graphics.beginPath();
+        graphics.moveTo(x - size * 0.38, y);
+        graphics.lineTo(x + size * 0.38, y);
+        graphics.strokePath();
+        graphics.fillTriangle(
+          x - size * 0.42,
+          y - size * 0.12,
+          x - size * 0.42,
+          y + size * 0.12,
+          x - size * 0.22,
+          y,
+        );
+        break;
+      case "lightning": {
+        const jagWidth = size * 0.22;
+        const top = y - size * 0.38;
+        const bottom = y + size * 0.38;
+        graphics.beginPath();
+        graphics.moveTo(x + size * 0.12, top);
+        graphics.lineTo(x - size * 0.12, y - size * 0.05);
+        graphics.lineTo(x + size * 0.08, y - size * 0.05);
+        graphics.lineTo(x - jagWidth, bottom);
+        graphics.lineTo(x + size * 0.02, y + size * 0.08);
+        graphics.lineTo(x + size * 0.18, y + size * 0.08);
+        graphics.closePath();
+        graphics.fillPath();
+        break;
+      }
       default: {
         const unsupportedPowerup: never = powerup;
         throw new RangeError(`Unknown crate icon: ${unsupportedPowerup}`);
+      }
+    }
+  }
+
+  private updateBeamEffects(deltaSeconds: number): void {
+    this.beamEffects = this.beamEffects
+      .map((effect) => ({
+        ...effect,
+        elapsed: effect.elapsed + deltaSeconds,
+      }))
+      .filter((effect) => effect.elapsed < 0.18);
+  }
+
+  private drawBeamEffects(): void {
+    const graphics = this.beamGraphics;
+    graphics.clear();
+    for (const effect of this.beamEffects) {
+      const player = this.players.find(
+        (candidate) => candidate.id === effect.ownerId,
+      );
+      const color =
+        effect.kind === "lightning"
+          ? config.presentation.playerColors[player?.colorIndex ?? 0]!
+          : config.presentation.powerupPickupColor;
+      graphics.lineStyle(
+        effect.kind === "laser"
+          ? config.powerups.laser.beamWidth * this.displayScale
+          : 3 * this.displayScale,
+        color,
+        0.8,
+      );
+      for (const segment of effect.segments) {
+        graphics.beginPath();
+        graphics.moveTo(
+          this.boardLeft + segment.start.x * this.displayScale,
+          this.boardTop + segment.start.y * this.displayScale,
+        );
+        graphics.lineTo(
+          this.boardLeft + segment.end.x * this.displayScale,
+          this.boardTop + segment.end.y * this.displayScale,
+        );
+        graphics.strokePath();
       }
     }
   }
@@ -1297,6 +1412,7 @@ export class GameScene extends Phaser.Scene {
 
   private clearRoundPowerups(): void {
     this.crates = [];
+    this.beamEffects = [];
     this.crateSpawnRemaining = config.powerups.crateSpawnInterval;
     for (const player of this.players) {
       player.weapons.reset();

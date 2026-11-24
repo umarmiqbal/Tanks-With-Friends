@@ -12,7 +12,9 @@ export type WeaponType =
   | "shotgun"
   | "frag-bomb"
   | "homing-missile"
-  | "mine";
+  | "mine"
+  | "laser"
+  | "lightning";
 export type SpecialWeaponType = Exclude<WeaponType, "cannon">;
 
 export interface WeaponFireContext {
@@ -418,6 +420,108 @@ export class MineWeapon implements Weapon {
   }
 }
 
+export class LaserWeapon implements Weapon {
+  readonly type = "laser" as const;
+  readonly hudIcon = "LSR";
+  private currentAmmo: number = config.powerups.laser.ammo;
+  private currentRemainingTime: number = config.powerups.laser.duration;
+  private cooldownRemaining = 0;
+
+  get ammoRemaining(): number {
+    return this.currentAmmo;
+  }
+  get remainingTime(): number {
+    return this.currentRemainingTime;
+  }
+  update(deltaSeconds: number): void {
+    this.cooldownRemaining = Math.max(0, this.cooldownRemaining - deltaSeconds);
+    this.currentRemainingTime = Math.max(
+      0,
+      this.currentRemainingTime - deltaSeconds,
+    );
+  }
+  onFire(context: WeaponFireContext): BulletState[] {
+    if (this.isExpired() || this.cooldownRemaining > 0) return [];
+    const bullet: BulletState = {
+      kind: "laser",
+      ownerId: context.ownerId,
+      x: context.origin.x,
+      y: context.origin.y,
+      velocityX: 0,
+      velocityY: 0,
+      radius: config.powerups.laser.beamWidth,
+      remainingLifetime:
+        config.powerups.laser.chargeDuration +
+        config.powerups.laser.lingerDuration,
+      fuseRemaining: config.powerups.laser.chargeDuration,
+      angle: context.angle,
+      beamMaxBounces: config.powerups.laser.maxBounces,
+      beamMaxDistance: config.powerups.laser.maxDistance,
+      bounceCount: 0,
+    };
+    const ownedCount = context.activeBullets.filter(
+      (activeBullet) => activeBullet.ownerId === context.ownerId,
+    ).length;
+    if (ownedCount >= context.bulletSettings.maxPerTank) return [];
+    this.currentAmmo -= 1;
+    this.cooldownRemaining = config.bullet.fireCooldown;
+    return [bullet];
+  }
+  isExpired(): boolean {
+    return this.currentAmmo <= 0 || this.currentRemainingTime <= 0;
+  }
+}
+
+export class LightningWeapon implements Weapon {
+  readonly type = "lightning" as const;
+  readonly hudIcon = "LTG";
+  private currentAmmo: number = config.powerups.lightning.ammo;
+  private currentRemainingTime: number = config.powerups.lightning.duration;
+  private cooldownRemaining = 0;
+
+  get ammoRemaining(): number {
+    return this.currentAmmo;
+  }
+  get remainingTime(): number {
+    return this.currentRemainingTime;
+  }
+  update(deltaSeconds: number): void {
+    this.cooldownRemaining = Math.max(0, this.cooldownRemaining - deltaSeconds);
+    this.currentRemainingTime = Math.max(
+      0,
+      this.currentRemainingTime - deltaSeconds,
+    );
+  }
+  onFire(context: WeaponFireContext): BulletState[] {
+    if (this.isExpired() || this.cooldownRemaining > 0) return [];
+    const bullet: BulletState = {
+      kind: "lightning",
+      ownerId: context.ownerId,
+      x: context.origin.x,
+      y: context.origin.y,
+      velocityX: 0,
+      velocityY: 0,
+      radius: 1,
+      remainingLifetime: 0.12,
+      bounceCount: 0,
+      angle: context.angle,
+      lightningRange: config.powerups.lightning.range,
+      lightningChainRange: config.powerups.lightning.chainRange,
+      lightningChainCount: config.powerups.lightning.chainCount,
+    };
+    const ownedCount = context.activeBullets.filter(
+      (activeBullet) => activeBullet.ownerId === context.ownerId,
+    ).length;
+    if (ownedCount >= context.bulletSettings.maxPerTank) return [];
+    this.currentAmmo -= 1;
+    this.cooldownRemaining = config.bullet.fireCooldown;
+    return [bullet];
+  }
+  isExpired(): boolean {
+    return this.currentAmmo <= 0 || this.currentRemainingTime <= 0;
+  }
+}
+
 export class WeaponLoadout {
   readonly defaultCannon = new DefaultCannon();
   private special: Weapon | null = null;
@@ -487,6 +591,10 @@ export function createSpecialWeapon(type: SpecialWeaponType): Weapon {
       return new HomingMissileWeapon();
     case "mine":
       return new MineWeapon();
+    case "laser":
+      return new LaserWeapon();
+    case "lightning":
+      return new LightningWeapon();
     default: {
       const unsupportedType: never = type;
       throw new RangeError(`Unknown special weapon: ${unsupportedType}`);

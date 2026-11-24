@@ -1,8 +1,10 @@
 import type { WallRect } from "./tankMovement";
 import { findNearestHomingTarget, steerHomingVelocity } from "./homing";
+import { getLaserBeamPath, type BeamTarget } from "./laser";
+import { selectLightningTargets } from "./lightning";
 
 export interface BulletState {
-  kind?: "bullet" | "rocket" | "frag-bomb" | "shrapnel" | "homing-missile" | "mine";
+  kind?: "bullet" | "rocket" | "frag-bomb" | "shrapnel" | "homing-missile" | "mine" | "laser" | "lightning";
   ownerId: string;
   x: number;
   y: number;
@@ -13,11 +15,17 @@ export interface BulletState {
   bounceCount: number;
   fuseRemaining?: number;
   armingRemaining?: number;
+  angle?: number;
   timeoutRemaining?: number;
   triggerRadius?: number;
   blastRadius?: number;
   turnRate?: number;
   blinkElapsed?: number;
+  beamMaxBounces?: number;
+  beamMaxDistance?: number;
+  lightningRange?: number;
+  lightningChainRange?: number;
+  lightningChainCount?: number;
 }
 
 export interface BulletTarget {
@@ -34,6 +42,8 @@ export interface BulletAdvanceResult {
   bounceCount: number;
   detonation: { x: number; y: number } | null;
   path: BulletPathSegment[];
+  beamSegments?: BulletPathSegment[];
+  lightningTargets?: BeamTarget[];
 }
 
 export interface BulletPathSegment {
@@ -323,6 +333,92 @@ export function advanceBullet(
       bounceCount: bullet.bounceCount,
       detonation: null,
       path: [],
+    };
+  }
+
+  if (bullet.kind === "laser") {
+    const chargeRemaining = Math.max(
+      0,
+      (bullet.fuseRemaining ?? 0) - deltaSeconds,
+    );
+    if (chargeRemaining > 0) {
+      return {
+        bullet: {
+          ...bullet,
+          fuseRemaining: chargeRemaining,
+          remainingLifetime:
+            (bullet.remainingLifetime ?? 0) - deltaSeconds,
+        },
+        hitTankId: null,
+        bounceCount: bullet.bounceCount,
+        detonation: null,
+        path: [],
+        beamSegments: [],
+      };
+    }
+    const segments = getLaserBeamPath(
+      { x: bullet.x, y: bullet.y },
+      bullet.angle ?? 0,
+      walls,
+      1,
+      settings.collisionEpsilon,
+      bullet.beamMaxBounces ?? 0,
+      bullet.beamMaxDistance ?? 0,
+      bullet.radius,
+    );
+    const lingerRemaining =
+      (bullet.remainingLifetime ?? 0) - deltaSeconds;
+    return {
+      bullet:
+        lingerRemaining > 0
+          ? {
+              ...bullet,
+              fuseRemaining: 0,
+              remainingLifetime: lingerRemaining,
+            }
+          : null,
+      hitTankId: null,
+      bounceCount: bullet.bounceCount,
+      detonation: null,
+      path: [],
+      beamSegments: segments,
+    };
+  }
+
+  if (bullet.kind === "lightning") {
+    const origin: BeamTarget = {
+      id: bullet.ownerId,
+      x: bullet.x,
+      y: bullet.y,
+      radius: 0,
+      alive: true,
+    };
+    const combatTargets = targets;
+    const lightningTargets = selectLightningTargets(
+      origin,
+      combatTargets,
+      walls,
+      bullet.lightningRange ?? 0,
+      bullet.lightningChainRange ?? 0,
+      bullet.lightningChainCount ?? 0,
+    );
+    const beamSegments: BulletPathSegment[] = [];
+    let from = origin;
+    for (const target of lightningTargets) {
+      beamSegments.push({
+        start: { x: from.x, y: from.y },
+        end: { x: target.x, y: target.y },
+      });
+      from = target;
+    }
+    return {
+      bullet: null,
+      hitTankId: null,
+      bounceCount: bullet.bounceCount,
+      detonation: null,
+      path: [],
+      beamSegments,
+      lightningTargets,
     };
   }
 

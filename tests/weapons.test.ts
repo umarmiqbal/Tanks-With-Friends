@@ -3,6 +3,8 @@ import { config } from "../src/config";
 import {
   DoubleShotWeapon,
   HomingMissileWeapon,
+  LaserWeapon,
+  LightningWeapon,
   MineWeapon,
   ShotgunWeapon,
   WeaponLoadout,
@@ -86,6 +88,20 @@ describe("weapon loadouts", () => {
     expect(mine[0]!.kind).toBe("mine");
     expect(mine[0]!.armingRemaining).toBe(config.powerups.mine.armingDelay);
     expect(mine[0]!.timeoutRemaining).toBe(config.powerups.mine.timeout);
+  });
+
+  it("creates charged laser and instant lightning projectiles", () => {
+    const laser = new LaserWeapon().onFire(fireContext);
+    const lightning = new LightningWeapon().onFire(fireContext);
+
+    expect(laser).toHaveLength(1);
+    expect(laser[0]!.kind).toBe("laser");
+    expect(laser[0]!.fuseRemaining).toBe(
+      config.powerups.laser.chargeDuration,
+    );
+    expect(laser[0]!.beamMaxBounces).toBe(config.powerups.laser.maxBounces);
+    expect(lightning).toHaveLength(1);
+    expect(lightning[0]!.kind).toBe("lightning");
   });
 
   it("lets all five volleys fire under the special's bullet cap", () => {

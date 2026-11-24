@@ -107,6 +107,11 @@ runtime.
   nearest tank with a limited turn rate, bounce off walls, and become able to
   target their shooter after a short arming delay. Mines arm after a delay,
   detonate inside a trigger radius or at timeout, and use a small radial blast.
+- M13 adds **Laser** and **Lightning**. Laser shows a charge telegraph, fires
+  an instant reflected beam for a brief visual linger, and destroys tanks along
+  all beam segments including the shooter. Lightning instantly hits the nearest
+  unobstructed tank, chains through additional nearby tanks, and never targets
+  the shooter.
 
 ## Milestones
 
@@ -130,6 +135,8 @@ runtime.
     a bounced-path preview sharing the live projectile collision logic.
 12. **M12 — Homing missile and mine:** limited steering, target selection,
     mine arming/triggers, and pure homing/mine tests.
+13. **M13 — Laser and lightning:** charge/linger beams, reflected beam geometry,
+    line-of-sight lightning selection, and chain limits.
 
 Each milestone is validated with `npx tsc --noEmit`, `npm test`, and
 `npm run build`, then committed before playtesting. Work stops at each
@@ -189,6 +196,8 @@ milestone boundary for player feedback.
 - The Rocket crate has a slightly higher weight than most crate types.
 - Homing missiles use limited turn-rate steering and bounce off walls. The
   shooter becomes a valid target after the arming delay.
+- Ghost may leave the maze while active because Ghost disables the normal tank
+  wall collision. It remains a funny, all-player-usable behavior for M13.
 - A Ghost tank that expires while overlapping a wall is moved to the nearest
   maze-cell center that can fit the tank. This uses a deterministic
   row-then-column tie break.

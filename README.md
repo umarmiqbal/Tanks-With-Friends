@@ -37,7 +37,7 @@ The test suite uses Vitest. The production build is written to `dist/`.
 
 ## Current milestone
 
-M11 builds on the M7 lobby: press **Space**, **Enter**, or another keyboard
+M13 builds on the M7 lobby: press **Space**, **Enter**, or another keyboard
 scheme's fire key to join, or press any button on a Standard-mapped controller.
 A joined player presses that same fire input again to start; all joined
 controllers must be connected. Up to six players can join. If a controller
@@ -77,10 +77,15 @@ Passive crates also provide:
   and becomes able to target its shooter after arming.
 - **Mine** — a delayed-arming explosive that blinks when armed, triggers on
   nearby tanks, or detonates after its timeout.
+- **Laser** — a short charge-up followed by an instant beam that reflects off
+  walls and can hit the shooter.
+- **Lightning** — instantly strikes the nearest visible tank, then chains to
+  nearby tanks within the configured limit.
 
 Every crate now has a distinct procedural icon indicating its pickup: paired
 shots, rocket, pellet fan, bomb, shield, health cross, speed bolt, ghost, or
-aim path.
+aim path. Homing missiles, mines, lasers, and lightning also have separate
+large, color-coded icons.
 
 Tank explosions, crate pickups, glowing bullets, and crate spawn-ins are drawn
 procedurally. Fire, bounce, explosion, pickup, and round-win sounds are
